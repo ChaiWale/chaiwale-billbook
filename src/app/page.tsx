@@ -454,6 +454,7 @@ export default function BillbookPosPage() {
 
       const invoiceRes = await generateInvoice({
         invoiceType: invType,
+        corporateClientId: targetOffice?.id || undefined,
         department: targetOffice?.company_name || targetOffice?.floor_unit || department || undefined,
         customerName: targetOffice?.name || newCustomerName.trim() || undefined,
         customerPhone: targetOffice?.phone || newCustomerPhone.trim() || undefined,
@@ -519,22 +520,9 @@ export default function BillbookPosPage() {
           : null
       );
 
-      // In parallel / background: save Khata entries and refresh offices
-      if (isCredit && targetOffice) {
-        Promise.all(
-          cart.map((item) =>
-            addKhataEntry({
-              office_id: targetOffice!.id,
-              date: billDate,
-              item_name: item.name,
-              quantity: item.quantity,
-              unit_price: item.unitPrice,
-              notes: `POS Bill #${invoiceRes.invoice.invoiceNumber}`
-            }).catch((e) => console.error('Khata entry logging error:', e))
-          )
-        ).then(() => {
-          fetchKhataOffices().then(setKhataOffices).catch(() => {});
-        });
+      // Refresh Khata offices state so balances and ledger update immediately
+      if (isCredit) {
+        fetchKhataOffices().then(setKhataOffices).catch(() => {});
       }
     } catch (err: any) {
       if (err.message?.includes('Authentication required') || err.message?.includes('Missing Bearer token')) {
