@@ -36,6 +36,9 @@ body {
   background-color: var(--cw-color-canvas);
   color: var(--cw-color-text-main);
   line-height: 1.4;
+  overflow-x: hidden;
+  max-width: 100vw;
+  width: 100%;
 }
 
 /* Print Stylesheet for thermal receipt / invoices */

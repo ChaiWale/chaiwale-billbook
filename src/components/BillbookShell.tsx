@@ -85,7 +85,7 @@ export default function BillbookShell({ children }: BillbookShellProps) {
           style={{ width: '54px', height: '54px', borderRadius: '10px', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}
         />
         <div style={{ fontSize: '15px', fontWeight: 600, color: '#E2E8F0', letterSpacing: '0.02em' }}>
-          Connecting to Terminal Counter-01...
+          Authenticating...
         </div>
       </div>
     );
@@ -136,7 +136,7 @@ export default function BillbookShell({ children }: BillbookShellProps) {
               Bill Book
             </h1>
             <p style={{ fontSize: '13px', color: '#64748B', marginTop: '4px', marginBottom: 0 }}>
-              Counter POS &amp; Billing Terminal Authentication
+              POS &amp; Billing Terminal
             </p>
           </div>
 
@@ -169,13 +169,13 @@ export default function BillbookShell({ children }: BillbookShellProps) {
                   marginBottom: '6px'
                 }}
               >
-                Counter Staff / Admin Email
+                Staff / Admin Email
               </label>
               <input
                 id="billbook-email"
                 type="email"
                 required
-                placeholder="e.g. counter01@pos-desk.net"
+                placeholder="e.g. staff@chaiwale.co.in"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 style={{
@@ -236,7 +236,7 @@ export default function BillbookShell({ children }: BillbookShellProps) {
                 boxShadow: 'var(--cw-shadow-sm)'
               }}
             >
-              {loading ? 'Authenticating Counter-01...' : 'Sign In to POS Terminal'}
+              {loading ? 'Authenticating...' : 'Sign In to POS Terminal'}
             </button>
           </form>
 
@@ -250,7 +250,7 @@ export default function BillbookShell({ children }: BillbookShellProps) {
               color: '#94A3B8'
             }}
           >
-            Authorized Terminal: Counter-01 • Zero-Tax POS Engine
+            Authorized Terminal • Zero-Tax POS Engine
           </div>
         </div>
       </main>
@@ -261,7 +261,7 @@ export default function BillbookShell({ children }: BillbookShellProps) {
   return (
     <>
       <header
-        className="no-print"
+        className="no-print billbook-header"
         style={{
           backgroundColor: '#0F172A',
           color: '#ffffff',
@@ -284,16 +284,13 @@ export default function BillbookShell({ children }: BillbookShellProps) {
               Bill Book
             </strong>
             <span style={{ fontSize: '11px', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              POS Billing Terminal
+              POS Terminal
             </span>
           </div>
         </div>
 
-        <div style={{ fontSize: '12px', color: '#CBD5E1', display: 'flex', gap: '14px', alignItems: 'center' }}>
-          <span>Terminal: <strong style={{ color: '#F8FAFC' }}>Counter-01</strong></span>
-          <span style={{ color: '#64748B' }}>|</span>
-          <span style={{ color: '#22C55E', fontWeight: 600 }}>● Live Connected</span>
-          <span style={{ color: '#64748B' }}>|</span>
+        <div className="billbook-header-right" style={{ fontSize: '12px', color: '#CBD5E1', display: 'flex', gap: '14px', alignItems: 'center' }}>
+          <span className="billbook-header-status" style={{ color: '#22C55E', fontWeight: 600 }}>● Live Connected</span>
 
           {/* Logged in Staff Badge + Sign Out */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -334,9 +331,28 @@ export default function BillbookShell({ children }: BillbookShellProps) {
         </div>
       </header>
 
-      <main style={{ padding: '20px', maxWidth: '1440px', margin: '0 auto' }}>
+      <main className="billbook-main-container" style={{ padding: '20px', maxWidth: '1440px', margin: '0 auto', width: '100%' }}>
         {children}
       </main>
+
+      <style jsx global>{`
+        @media (max-width: 768px) {
+          .billbook-header {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 10px !important;
+            padding: 10px 14px !important;
+          }
+          .billbook-header-right {
+            width: 100% !important;
+            justify-content: space-between !important;
+            gap: 8px !important;
+          }
+          .billbook-main-container {
+            padding: 10px !important;
+          }
+        }
+      `}</style>
     </>
   );
 }

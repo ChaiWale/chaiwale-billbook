@@ -688,7 +688,20 @@ export default function BillbookPosPage() {
   return (
     <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
       {/* Top Navigation Tabs */}
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', borderBottom: '2px solid #E2E8F0', paddingBottom: '8px' }}>
+      <div
+        className="billbook-top-tabs"
+        style={{
+          display: 'flex',
+          gap: '12px',
+          marginBottom: '20px',
+          borderBottom: '2px solid #E2E8F0',
+          paddingBottom: '8px',
+          overflowX: 'auto',
+          WebkitOverflowScrolling: 'touch',
+          maxWidth: '100%',
+          scrollbarWidth: 'none'
+        }}
+      >
         <button
           onClick={() => setActiveTab('POS')}
           style={{
@@ -924,9 +937,9 @@ export default function BillbookPosPage() {
 
               {/* Searchable Autocomplete Combobox Bar */}
               <div ref={searchContainerRef} style={{ position: 'relative', marginBottom: '16px' }}>
-                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <div className="billbook-search-row" style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
                   {/* Search Input Box */}
-                  <div style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <div style={{ flex: 1, minWidth: '200px', position: 'relative', display: 'flex', alignItems: 'center' }}>
                     <span style={{ position: 'absolute', left: '12px', color: '#94A3B8', fontSize: '15px', pointerEvents: 'none' }}>🔍</span>
                     <input
                       type="text"
@@ -973,62 +986,64 @@ export default function BillbookPosPage() {
                     )}
                   </div>
 
-                  {/* Quantity Stepper */}
-                  <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #CBD5E1', borderRadius: '8px', overflow: 'hidden', height: '42px', backgroundColor: '#F8FAFC' }}>
+                  <div className="billbook-stepper-add-group" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    {/* Quantity Stepper */}
+                    <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #CBD5E1', borderRadius: '8px', overflow: 'hidden', height: '42px', backgroundColor: '#F8FAFC' }}>
+                      <button
+                        type="button"
+                        onClick={() => setInputQuantity((prev) => Math.max(1, prev - 1))}
+                        style={{ padding: '0 12px', height: '100%', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 800, fontSize: '15px', color: '#475569' }}
+                      >
+                        -
+                      </button>
+                      <input
+                        type="number"
+                        min={1}
+                        value={inputQuantity}
+                        onChange={(e) => setInputQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                        style={{ width: '42px', textAlign: 'center', border: 'none', background: 'transparent', fontWeight: 700, fontSize: '14px', outline: 'none' }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setInputQuantity((prev) => prev + 1)}
+                        style={{ padding: '0 12px', height: '100%', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 800, fontSize: '15px', color: '#475569' }}
+                      >
+                        +
+                      </button>
+                    </div>
+
+                    {/* Add Button */}
                     <button
                       type="button"
-                      onClick={() => setInputQuantity((prev) => Math.max(1, prev - 1))}
-                      style={{ padding: '0 12px', height: '100%', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 800, fontSize: '15px', color: '#475569' }}
+                      onClick={() => {
+                        if (filteredBillableItems.length > 0) {
+                          const sel = highlightedIndex >= 0 && highlightedIndex < filteredBillableItems.length
+                            ? filteredBillableItems[highlightedIndex]
+                            : filteredBillableItems[0];
+                          addItemToCart({ productId: sel.productId, name: sel.name, unitPrice: sel.unitPrice }, inputQuantity);
+                          setSearchItemText('');
+                        } else if (selectedProductId) {
+                          addItemToCart(undefined, inputQuantity);
+                        }
+                      }}
+                      style={{
+                        padding: '11px 22px',
+                        backgroundColor: 'var(--cw-color-primary, #C85A17)',
+                        color: '#FFF',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontWeight: 700,
+                        fontSize: '14px',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
                     >
-                      -
-                    </button>
-                    <input
-                      type="number"
-                      min={1}
-                      value={inputQuantity}
-                      onChange={(e) => setInputQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                      style={{ width: '42px', textAlign: 'center', border: 'none', background: 'transparent', fontWeight: 700, fontSize: '14px', outline: 'none' }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setInputQuantity((prev) => prev + 1)}
-                      style={{ padding: '0 12px', height: '100%', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 800, fontSize: '15px', color: '#475569' }}
-                    >
-                      +
+                      <span>+ Add to Bill</span>
                     </button>
                   </div>
-
-                  {/* Add Button */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (filteredBillableItems.length > 0) {
-                        const sel = highlightedIndex >= 0 && highlightedIndex < filteredBillableItems.length
-                          ? filteredBillableItems[highlightedIndex]
-                          : filteredBillableItems[0];
-                        addItemToCart({ productId: sel.productId, name: sel.name, unitPrice: sel.unitPrice }, inputQuantity);
-                        setSearchItemText('');
-                      } else if (selectedProductId) {
-                        addItemToCart(undefined, inputQuantity);
-                      }
-                    }}
-                    style={{
-                      padding: '11px 22px',
-                      backgroundColor: 'var(--cw-color-primary, #C85A17)',
-                      color: '#FFF',
-                      border: 'none',
-                      borderRadius: '8px',
-                      fontWeight: 700,
-                      fontSize: '14px',
-                      cursor: 'pointer',
-                      whiteSpace: 'nowrap',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px'
-                    }}
-                  >
-                    <span>+ Add to Bill</span>
-                  </button>
                 </div>
 
                 {/* Autocomplete Suggestions Popup */}
@@ -1766,6 +1781,21 @@ export default function BillbookPosPage() {
           .pos-billing-grid {
             grid-template-columns: 1fr;
             gap: 16px;
+          }
+        }
+        @media (max-width: 640px) {
+          .billbook-search-row {
+            flex-direction: column !important;
+            align-items: stretch !important;
+          }
+          .billbook-stepper-add-group {
+            display: flex !important;
+            width: 100% !important;
+            gap: 10px !important;
+          }
+          .billbook-stepper-add-group button[type="button"]:last-child {
+            flex: 1 !important;
+            justify-content: center !important;
           }
         }
       `}</style>

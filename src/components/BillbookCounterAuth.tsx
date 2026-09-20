@@ -158,7 +158,7 @@ export default function BillbookCounterAuth() {
               />
               <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0 }}>Counter Staff Sign-In</h2>
               <p style={{ fontSize: '12px', color: '#64748B', marginTop: '4px', marginBottom: 0 }}>
-                Authenticate Counter-01 for Invoicing &amp; Billing Operations
+                Authenticate Staff for Invoicing &amp; Billing Operations
               </p>
             </div>
 

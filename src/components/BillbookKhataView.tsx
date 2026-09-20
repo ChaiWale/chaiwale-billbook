@@ -639,7 +639,7 @@ export const BillbookKhataView: React.FC = () => {
                     </span>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '16px', marginTop: '6px', fontSize: '13px', color: '#6B7280' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 16px', marginTop: '6px', fontSize: '13px', color: '#6B7280' }}>
                     <span>📱 WhatsApp: <strong style={{ color: '#111827' }}>{selectedOffice.phone}</strong></span>
                     {selectedOffice.company_name && (
                       <span>🏢 Company: <strong style={{ color: '#111827' }}>{selectedOffice.company_name}</strong></span>
@@ -1305,15 +1305,18 @@ export const BillbookKhataView: React.FC = () => {
           display: flex;
           flex: 1;
           overflow: hidden;
+          width: 100%;
         }
         @media (max-width: 768px) {
           .khata-main-layout {
             flex-direction: column !important;
             overflow-y: auto !important;
+            overflow-x: hidden !important;
+            width: 100% !important;
           }
           .khata-directory-column {
             width: 100% !important;
-            max-height: 260px !important;
+            max-height: 240px !important;
             border-right: none !important;
             border-bottom: 1px solid #E5E7EB !important;
           }
