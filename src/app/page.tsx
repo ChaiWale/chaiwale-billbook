@@ -220,7 +220,7 @@ export default function BillbookPosPage() {
     loadKhata();
   }, [loadKhata]);
 
-  // Real-time matched Khata offices for customer search
+  // Real-time matched Khata offices for customer search across 4 fields + PIN
   const matchedKhataOffices = useMemo(() => {
     const q = khataSearchQuery.trim().toLowerCase();
     if (!q) return [];
@@ -228,9 +228,10 @@ export default function BillbookPosPage() {
     return khataOffices.filter((o) => {
       const phoneMatch = digits.length >= 2 && o.phone.replace(/\D/g, '').includes(digits);
       const nameMatch = o.name.toLowerCase().includes(q);
-      const companyMatch = o.company_name?.toLowerCase().includes(q);
-      const pinMatch = (o.client_pin || o.generated_pin) === q;
-      return Boolean(phoneMatch || nameMatch || companyMatch || pinMatch);
+      const buildingMatch = o.company_name?.toLowerCase().includes(q);
+      const officeMatch = o.floor_unit?.toLowerCase().includes(q);
+      const pinMatch = (o.client_pin || o.generated_pin)?.toLowerCase().includes(q);
+      return Boolean(phoneMatch || nameMatch || buildingMatch || officeMatch || pinMatch);
     });
   }, [khataOffices, khataSearchQuery]);
 
@@ -1406,7 +1407,7 @@ export default function BillbookPosPage() {
                             </span>
                           </div>
                           <div style={{ fontSize: '11px', color: '#64748B', marginTop: '3px' }}>
-                            📞 {selectedKhataOffice.phone} {selectedKhataOffice.company_name ? `• 🏢 ${selectedKhataOffice.company_name}` : ''} {selectedKhataOffice.floor_unit ? `(${selectedKhataOffice.floor_unit})` : ''}
+                            📞 {selectedKhataOffice.phone} {selectedKhataOffice.company_name ? `• 🏢 ${selectedKhataOffice.company_name}` : ''} {selectedKhataOffice.floor_unit ? `• 📍 ${selectedKhataOffice.floor_unit}` : ''}
                           </div>
                           <div style={{ fontSize: '11px', fontWeight: 800, marginTop: '5px', color: selectedKhataOffice.balance_due > 0 ? '#DC2626' : '#16A34A' }}>
                             {selectedKhataOffice.balance_due > 0 ? `Current Outstanding Udhaar: ₹${selectedKhataOffice.balance_due.toFixed(2)}` : '✓ All Previous Bills Settled (₹0 Due)'}
@@ -1425,7 +1426,7 @@ export default function BillbookPosPage() {
                       </div>
                     </div>
                   ) : isNewKhataCustomer ? (
-                    /* Case 2: Register New Customer for Khata */
+                    /* Case 2: Register New Customer for Khata (4 Simple Fields) */
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', backgroundColor: '#FFFFFF', padding: '10px', borderRadius: '6px', border: '1px solid #CBD5E1' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontSize: '12px', fontWeight: 800, color: '#1E40AF' }}>✨ Register New Khata Account</span>
@@ -1438,7 +1439,7 @@ export default function BillbookPosPage() {
                         </button>
                       </div>
                       <div>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '2px' }}>Customer / Client Name *</label>
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '2px' }}>1. Customer / Client Name *</label>
                         <input
                           type="text"
                           placeholder="e.g. Ramesh Kumar"
@@ -1448,7 +1449,7 @@ export default function BillbookPosPage() {
                         />
                       </div>
                       <div>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '2px' }}>Mobile / WhatsApp Number *</label>
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '2px' }}>2. Mobile / WhatsApp Number *</label>
                         <input
                           type="tel"
                           maxLength={10}
@@ -1460,20 +1461,20 @@ export default function BillbookPosPage() {
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
                         <div>
-                          <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, color: '#475569', marginBottom: '2px' }}>Company / Office (Opt)</label>
+                          <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, color: '#475569', marginBottom: '2px' }}>3. Building (Opt)</label>
                           <input
                             type="text"
-                            placeholder="e.g. TCS / Cognizant"
+                            placeholder="e.g. Vardhman Plaza"
                             value={newCustomerCompany}
                             onChange={(e) => setNewCustomerCompany(e.target.value)}
                             style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '11px' }}
                           />
                         </div>
                         <div>
-                          <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, color: '#475569', marginBottom: '2px' }}>Floor / Unit (Opt)</label>
+                          <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, color: '#475569', marginBottom: '2px' }}>4. Office Detail (Opt)</label>
                           <input
                             type="text"
-                            placeholder="e.g. 4th Floor"
+                            placeholder="e.g. Office 302, Shop G-12"
                             value={newCustomerFloor}
                             onChange={(e) => setNewCustomerFloor(e.target.value)}
                             style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '11px' }}
@@ -1489,7 +1490,7 @@ export default function BillbookPosPage() {
                     <div style={{ position: 'relative' }}>
                       <input
                         type="text"
-                        placeholder="Search customer by Mobile, Name, or 4-digit PIN..."
+                        placeholder="Search by Name, Phone, Building, Office, or PIN..."
                         value={khataSearchQuery}
                         onChange={(e) => setKhataSearchQuery(e.target.value)}
                         style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '12px', backgroundColor: '#FFFFFF' }}
@@ -1534,7 +1535,8 @@ export default function BillbookPosPage() {
                                 <div>
                                   <strong style={{ color: '#0F172A' }}>{off.name}</strong>
                                   <span style={{ fontSize: '11px', color: '#64748B', marginLeft: '6px' }}>({off.phone})</span>
-                                  {off.company_name && <span style={{ fontSize: '10px', color: '#94A3B8', marginLeft: '4px' }}>• {off.company_name}</span>}
+                                  {off.company_name && <span style={{ fontSize: '10px', color: '#475569', marginLeft: '4px' }}>• 🏢 {off.company_name}</span>}
+                                  {off.floor_unit && <span style={{ fontSize: '10px', color: '#475569', marginLeft: '4px' }}>• 📍 {off.floor_unit}</span>}
                                   <span style={{ marginLeft: '6px', fontSize: '10px', backgroundColor: '#EFF6FF', color: '#1D4ED8', padding: '1px 5px', borderRadius: '3px', fontFamily: 'monospace' }}>
                                     PIN: {off.client_pin || off.generated_pin || '----'}
                                   </span>

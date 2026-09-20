@@ -222,9 +222,20 @@ export function clearBillbookAuthToken(): void {
 
 /**
  * Authenticated Fetch for Protected BillBook Endpoints
+ * Automatically re-authenticates counter staff if token is missing or expired (401)
  */
 async function authFetch(input: string, init: RequestInit = {}): Promise<Response> {
-  const token = getBillbookAuthToken();
+  let token = getBillbookAuthToken();
+
+  if (!token && typeof window !== 'undefined') {
+    try {
+      const auth = await quickLoginBillingStaff();
+      token = auth.accessToken;
+    } catch (loginErr) {
+      console.warn('Silent counter auto-login failed on initial check:', loginErr);
+    }
+  }
+
   const headers = new Headers(init.headers || {});
 
   if (token) {
@@ -235,13 +246,28 @@ async function authFetch(input: string, init: RequestInit = {}): Promise<Respons
     headers.set('Content-Type', 'application/json');
   }
 
-  const response = await fetch(input, {
+  let response = await fetch(input, {
     ...init,
     headers
   });
 
   if (response.status === 401 && typeof window !== 'undefined') {
     clearBillbookAuthToken();
+    try {
+      // Re-authenticate silently and retry request once
+      const auth = await quickLoginBillingStaff();
+      const retryHeaders = new Headers(init.headers || {});
+      retryHeaders.set('Authorization', `Bearer ${auth.accessToken}`);
+      if (init.body && !retryHeaders.has('Content-Type')) {
+        retryHeaders.set('Content-Type', 'application/json');
+      }
+      response = await fetch(input, {
+        ...init,
+        headers: retryHeaders
+      });
+    } catch (retryErr) {
+      console.error('Silent counter re-authentication failed on 401 retry:', retryErr);
+    }
   }
 
   return response;

@@ -377,12 +377,16 @@ export const BillbookKhataView: React.FC = () => {
     showToast('Bill statement copied to clipboard!');
   };
 
-  const filteredOffices = offices.filter(
-    (o) =>
-      o.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  const filteredOffices = offices.filter((o) => {
+    const q = searchTerm.toLowerCase();
+    return (
+      o.name.toLowerCase().includes(q) ||
       o.phone.includes(searchTerm) ||
-      (o.company_name && o.company_name.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+      (o.company_name && o.company_name.toLowerCase().includes(q)) ||
+      (o.floor_unit && o.floor_unit.toLowerCase().includes(q)) ||
+      ((o.client_pin || o.generated_pin) && (o.client_pin || o.generated_pin)!.includes(searchTerm))
+    );
+  });
 
   const selectedOffice = offices.find((o) => o.id === selectedOfficeId);
   const totalMarketDue = offices.reduce((s, o) => s + (o.balance_due > 0 ? o.balance_due : 0), 0);
@@ -511,7 +515,7 @@ export const BillbookKhataView: React.FC = () => {
           <div style={{ padding: '12px 16px', borderBottom: '1px solid #F3F4F6' }}>
             <input
               type="text"
-              placeholder="🔍 Search office or phone..."
+              placeholder="🔍 Search Name, Phone, Building, Office, PIN..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={{
@@ -564,9 +568,9 @@ export const BillbookKhataView: React.FC = () => {
                         <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '2px' }}>
                           📱 {off.phone}
                         </div>
-                        {off.floor_unit && (
-                          <div style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '2px' }}>
-                            📍 {off.floor_unit}
+                        {(off.company_name || off.floor_unit) && (
+                          <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {off.company_name ? `🏢 ${off.company_name}` : ''} {off.floor_unit ? `• 📍 ${off.floor_unit}` : ''}
                           </div>
                         )}
                       </div>
@@ -1229,11 +1233,11 @@ export const BillbookKhataView: React.FC = () => {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#374151', marginBottom: '4px' }}>
-                    Company / Org Name
+                    Building Name
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. Apex Corp"
+                    placeholder="e.g. Vardhman Grand Plaza"
                     value={newOfficeCompany}
                     onChange={(e) => setNewOfficeCompany(e.target.value)}
                     style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '13px', boxSizing: 'border-box' }}
@@ -1242,11 +1246,11 @@ export const BillbookKhataView: React.FC = () => {
 
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#374151', marginBottom: '4px' }}>
-                    Floor / Cabin No.
+                    Office Detail
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. 3rd Floor #302"
+                    placeholder="e.g. Office 302, Shop G-12"
                     value={newOfficeFloor}
                     onChange={(e) => setNewOfficeFloor(e.target.value)}
                     style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '13px', boxSizing: 'border-box' }}
