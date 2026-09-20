@@ -132,8 +132,8 @@ export default function BillbookShell({ children }: BillbookShellProps) {
                 boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
               }}
             />
-            <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#1E2328', margin: 0, letterSpacing: '0.04em' }}>
-              CHAIWALE BILLBOOK
+            <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#1E2328', margin: 0, letterSpacing: '0.04em' }}>
+              Bill Book
             </h1>
             <p style={{ fontSize: '13px', color: '#64748B', marginTop: '4px', marginBottom: 0 }}>
               Counter POS &amp; Billing Terminal Authentication
@@ -175,7 +175,7 @@ export default function BillbookShell({ children }: BillbookShellProps) {
                 id="billbook-email"
                 type="email"
                 required
-                placeholder="e.g. bills@chaiwale.co.in"
+                placeholder="e.g. counter01@pos-desk.net"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 style={{
@@ -280,8 +280,8 @@ export default function BillbookShell({ children }: BillbookShellProps) {
             style={{ height: '34px', width: 'auto', borderRadius: '4px' }}
           />
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-            <strong style={{ fontFamily: 'var(--cw-font-heading)', fontSize: '17px', letterSpacing: '0.03em' }}>
-              CHAIWALE BILLBOOK
+            <strong style={{ fontFamily: 'var(--cw-font-heading)', fontSize: '18px', fontWeight: 800, letterSpacing: '0.03em' }}>
+              Bill Book
             </strong>
             <span style={{ fontSize: '11px', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               POS Billing Terminal
@@ -312,7 +312,7 @@ export default function BillbookShell({ children }: BillbookShellProps) {
               }}
             >
               <span style={{ width: '6px', height: '6px', backgroundColor: '#34D399', borderRadius: '50%' }} />
-              {user.fullName || user.email}
+              {user.fullName || (user.role === 'ADMIN' ? 'Head Cashier' : 'Counter Operator')}
             </span>
             <button
               onClick={handleSignOut}

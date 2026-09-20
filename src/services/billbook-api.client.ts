@@ -10,8 +10,16 @@ export interface MenuItemDto {
   description: string | null;
   base_price: number;
   is_veg: boolean;
+  is_egg?: boolean;
+  tags?: string[];
   image_path: string | null;
   is_available: boolean;
+  variants?: Array<{
+    id?: string;
+    name: string;
+    price: number;
+    is_available?: boolean;
+  }>;
 }
 
 export interface BillingItemInput {
@@ -47,6 +55,9 @@ export interface GenerateInvoiceInputDto {
   cateringQuoteId?: string;
   invoiceType: 'DIRECT' | 'CORPORATE_CREDIT' | 'CATERING';
   department?: string;
+  customerName?: string;
+  customerPhone?: string;
+  issueDate?: string;
   items: BillingItemInput[];
   overallDiscountPercent?: number;
   additionalCharges?: number;
@@ -218,6 +229,10 @@ async function authFetch(input: string, init: RequestInit = {}): Promise<Respons
 
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  if (init.body && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
   }
 
   const response = await fetch(input, {
@@ -548,6 +563,8 @@ export interface KhataOfficeDto {
   company_name?: string;
   floor_unit?: string;
   notes?: string;
+  client_pin?: string;
+  generated_pin?: string;
   total_consumption: number;
   total_payments: number;
   balance_due: number;
@@ -608,6 +625,7 @@ export async function createKhataOffice(input: {
 }): Promise<KhataOfficeDto> {
   const res = await authFetch(`${BACKEND_URL}/api/v1/khata/offices`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input)
   });
   if (!res.ok) {
@@ -628,6 +646,7 @@ export async function addKhataEntry(input: {
 }): Promise<KhataEntryDto> {
   const res = await authFetch(`${BACKEND_URL}/api/v1/khata/entries`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input)
   });
   if (!res.ok) {
@@ -657,6 +676,7 @@ export async function addKhataPayment(input: {
 }): Promise<KhataPaymentDto> {
   const res = await authFetch(`${BACKEND_URL}/api/v1/khata/payments`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input)
   });
   if (!res.ok) {
@@ -686,3 +706,14 @@ export async function fetchKhataStatement(
   const data = await res.json();
   return data.data;
 }
+
+export async function deleteKhataOffice(id: string): Promise<void> {
+  const res = await authFetch(`${BACKEND_URL}/api/v1/khata/offices/${encodeURIComponent(id)}`, {
+    method: 'DELETE'
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'Failed to delete Khata account');
+  }
+}
+

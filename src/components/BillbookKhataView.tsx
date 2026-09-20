@@ -8,9 +8,12 @@ import {
   deleteKhataEntry,
   addKhataPayment,
   fetchKhataStatement,
+  deleteKhataOffice,
   KhataOfficeDto,
   KhataStatementDto
 } from '../services/billbook-api.client';
+import { ThermalReceiptModal, ThermalReceiptData } from './ThermalReceiptModal';
+import { ChaiwaleDialog, ChaiwaleDialogConfig } from './ChaiwaleDialog';
 
 export const BillbookKhataView: React.FC = () => {
   const [offices, setOffices] = useState<KhataOfficeDto[]>([]);
@@ -21,6 +24,10 @@ export const BillbookKhataView: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [notification, setNotification] = useState<string | null>(null);
 
+  // 3D Thermal Receipt Modal State for Khata
+  const [thermalReceiptModalOpen, setThermalReceiptModalOpen] = useState(false);
+  const [thermalReceiptData, setThermalReceiptData] = useState<ThermalReceiptData | null>(null);
+
   // Modals
   const [showAddOfficeModal, setShowAddOfficeModal] = useState(false);
   const [newOfficeName, setNewOfficeName] = useState('');
@@ -29,29 +36,29 @@ export const BillbookKhataView: React.FC = () => {
   const [newOfficeFloor, setNewOfficeFloor] = useState('');
   const [newOfficeNotes, setNewOfficeNotes] = useState('');
 
-  // Daily Entry Form (You Gave)
+  // Daily Entry Form (Debit Entry / Order Bill)
   const [entryDate, setEntryDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [entryItemName, setEntryItemName] = useState('Chai');
+  const [entryItemName, setEntryItemName] = useState('Kulhad Chai');
   const [entryQty, setEntryQty] = useState<number>(5);
-  const [entryPrice, setEntryPrice] = useState<number>(12);
+  const [entryPrice, setEntryPrice] = useState<number>(15);
   const [entryNotes, setEntryNotes] = useState('');
 
-  // Payment Form (You Got)
+  // Payment Form (Credit Entry / Settlement)
   const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [paymentAmount, setPaymentAmount] = useState<string>('');
   const [paymentMode, setPaymentMode] = useState<string>('UPI');
   const [paymentNotes, setPaymentNotes] = useState('');
 
-  // Quick Preset Items for Canteen
+  // Quick Preset Items for Canteen & Fast Food
   const QUICK_ITEMS = [
-    { name: 'Chai', price: 12 },
-    { name: 'Sutta', price: 18 },
-    { name: 'Mathi', price: 15 },
-    { name: 'Samosa', price: 15 },
+    { name: 'Kulhad Chai', price: 15 },
     { name: 'Bun Maska', price: 25 },
+    { name: 'Samosa', price: 15 },
+    { name: 'Poha', price: 30 },
+    { name: 'Aalu Paratha', price: 30 },
+    { name: 'Chhole Chawal', price: 70 },
     { name: 'Veg Thali', price: 99 },
     { name: 'Bread Pakoda', price: 15 },
-    { name: 'Veg Sandwich', price: 45 },
     { name: 'Cold Coffee', price: 60 }
   ];
 
@@ -94,6 +101,17 @@ export const BillbookKhataView: React.FC = () => {
     }
   }, [selectedOfficeId]);
 
+  // Custom Popups / Dialogs State
+  const [dialogConfig, setDialogConfig] = useState<ChaiwaleDialogConfig | null>(null);
+
+  const showAlert = (title: string, message: string, type: 'info' | 'success' | 'error' | 'warning' = 'info') => {
+    setDialogConfig({ isOpen: true, mode: 'ALERT', title, message, type });
+  };
+
+  const showConfirm = (title: string, message: string, onConfirm: () => void, confirmText = 'Confirm', isDanger = false) => {
+    setDialogConfig({ isOpen: true, mode: 'CONFIRM', title, message, onConfirm, confirmText, isDanger });
+  };
+
   const showToast = (msg: string) => {
     setNotification(msg);
     setTimeout(() => setNotification(null), 3500);
@@ -102,7 +120,7 @@ export const BillbookKhataView: React.FC = () => {
   const handleCreateOffice = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newOfficeName.trim() || !newOfficePhone.trim()) {
-      alert('Office Name and Mobile number are required');
+      showAlert('Required Fields Missing', 'Please enter both Office / Customer Name and Mobile number.', 'warning');
       return;
     }
     try {
@@ -123,15 +141,81 @@ export const BillbookKhataView: React.FC = () => {
       await loadOffices();
       setSelectedOfficeId(created.id);
     } catch (err: any) {
-      alert(err.message || 'Failed to create office');
+      showAlert('Creation Failed', err.message || 'Failed to create Khata office account.', 'error');
     }
+  };
+
+  const handleDeleteOffice = (officeId: string, officeName: string) => {
+    showConfirm(
+      'Delete Khata Account?',
+      `Are you sure you want to permanently delete "${officeName}"?\n\nAll ledger entries, consumption history, and payment records for this account will be erased.`,
+      async () => {
+        try {
+          await deleteKhataOffice(officeId);
+          showToast(`Account "${officeName}" deleted successfully`);
+          setSelectedOfficeId(null);
+          await loadOffices();
+        } catch (err: any) {
+          showAlert('Delete Failed', err.message || 'Could not delete Khata office account.', 'error');
+        }
+      },
+      'Delete Account',
+      true
+    );
+  };
+
+  const handleGenerateKhataBillSlip = (office: KhataOfficeDto, stmt: KhataStatementDto | null) => {
+    const items: Array<{ name: string; quantity: number; unitPrice: number; lineTotal: number; notes?: string }> = [];
+
+    if (stmt && stmt.dateGroups && stmt.dateGroups.length > 0) {
+      stmt.dateGroups.forEach((grp) => {
+        grp.items.forEach((it) => {
+          items.push({
+            name: `${it.item_name} [${grp.date}]`,
+            quantity: it.quantity,
+            unitPrice: it.unit_price,
+            lineTotal: it.total_amount ?? (it.quantity * it.unit_price),
+            notes: it.notes || undefined
+          });
+        });
+      });
+    } else {
+      items.push({
+        name: 'Khata Statement Balance',
+        quantity: 1,
+        unitPrice: office.balance_due,
+        lineTotal: office.balance_due
+      });
+    }
+
+    const cleanPhone = office.phone ? office.phone.replace(/\D/g, '') : '';
+    const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+    const waUrl = stmt?.whatsappText && cleanPhone ? `https://wa.me/${fullPhone}?text=${encodeURIComponent(stmt.whatsappText)}` : undefined;
+
+    setThermalReceiptData({
+      receiptType: 'CREDIT_BILL',
+      invoiceNumber: `KHATA-${(office.name || 'ACC').slice(0, 4).toUpperCase().replace(/\s+/g, '')}-${Date.now().toString().slice(-4)}`,
+      date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) + ', ' + new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+      paymentMode: 'CREDIT',
+      customerName: office.name,
+      customerPhone: office.phone,
+      customerAddress: office.company_name ? `${office.company_name}${office.floor_unit ? ` (${office.floor_unit})` : ''}` : office.floor_unit || undefined,
+      customerPin: office.client_pin || office.generated_pin || undefined,
+      customerTotalDue: office.balance_due,
+      items,
+      subtotal: stmt?.totalConsumption || office.balance_due,
+      paidAmount: stmt?.totalPayments || 0,
+      grandTotal: office.balance_due,
+      whatsAppUrl: waUrl
+    });
+    setThermalReceiptModalOpen(true);
   };
 
   const handleAddEntry = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedOfficeId) return;
     if (!entryItemName.trim() || entryQty <= 0 || entryPrice < 0) {
-      alert('Please fill valid item, quantity and price');
+      showAlert('Validation Error', 'Please enter a valid item name, quantity, and price.', 'warning');
       return;
     }
     try {
@@ -147,23 +231,66 @@ export const BillbookKhataView: React.FC = () => {
       setEntryNotes('');
       await loadStatement(selectedOfficeId);
       await loadOffices();
+
+      // Automatically pop up the 3D Thermal Receipt modal with this updated entry!
+      const curr = offices.find((o) => o.id === selectedOfficeId);
+      if (curr) {
+        const cleanPhone = curr.phone ? curr.phone.replace(/\D/g, '') : '';
+        const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+        const entryTotal = Number(entryQty) * Number(entryPrice);
+        const newDue = curr.balance_due + entryTotal;
+        const pin = curr.client_pin || curr.generated_pin || '----';
+        const formattedDate = new Date(entryDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+        const waMsg = `Namaste ${curr.name}, Chaiwale Debit Bill (${formattedDate}) of ₹${entryTotal} [${entryQty}x ${entryItemName}] has been recorded. Total Khata Due: ₹${newDue}. Check statement with PIN ${pin} at https://chaiwale.co.in/check-bill`;
+        const waUrl = cleanPhone ? `https://wa.me/${fullPhone}?text=${encodeURIComponent(waMsg)}` : undefined;
+
+        setThermalReceiptData({
+          receiptType: 'CREDIT_BILL',
+          invoiceNumber: `DEBIT-${Date.now().toString().slice(-6)}`,
+          date: formattedDate + ', ' + new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+          paymentMode: 'CREDIT',
+          customerName: curr.name,
+          customerPhone: curr.phone,
+          customerAddress: curr.company_name || curr.floor_unit || undefined,
+          customerPin: pin,
+          customerTotalDue: newDue,
+          items: [{
+            name: entryItemName,
+            quantity: Number(entryQty),
+            unitPrice: Number(entryPrice),
+            lineTotal: entryTotal,
+            notes: entryNotes || undefined
+          }],
+          subtotal: entryTotal,
+          grandTotal: entryTotal,
+          whatsAppUrl: waUrl
+        });
+        setThermalReceiptModalOpen(true);
+      }
     } catch (err: any) {
-      alert(err.message || 'Failed to add entry');
+      showAlert('Entry Failed', err.message || 'Failed to add entry', 'error');
     }
   };
 
-  const handleDeleteEntry = async (entryId: string) => {
-    if (!confirm('Are you sure you want to remove this item from the khata?')) return;
-    try {
-      await deleteKhataEntry(entryId);
-      showToast('Entry removed');
-      if (selectedOfficeId) {
-        await loadStatement(selectedOfficeId);
-        await loadOffices();
-      }
-    } catch (err: any) {
-      alert(err.message || 'Failed to delete');
-    }
+  const handleDeleteEntry = (entryId: string) => {
+    showConfirm(
+      'Remove Khata Entry?',
+      'Are you sure you want to remove this item from the khata ledger?',
+      async () => {
+        try {
+          await deleteKhataEntry(entryId);
+          showToast('Entry removed successfully');
+          if (selectedOfficeId) {
+            await loadStatement(selectedOfficeId);
+            await loadOffices();
+          }
+        } catch (err: any) {
+          showAlert('Delete Failed', err.message || 'Failed to delete entry', 'error');
+        }
+      },
+      'Remove Item',
+      true
+    );
   };
 
   const handleAddPayment = async (e: React.FormEvent) => {
@@ -171,7 +298,7 @@ export const BillbookKhataView: React.FC = () => {
     if (!selectedOfficeId) return;
     const amt = Number(paymentAmount);
     if (!amt || amt <= 0) {
-      alert('Please enter a valid payment amount');
+      showAlert('Invalid Amount', 'Please enter a valid payment amount greater than ₹0.', 'warning');
       return;
     }
     try {
@@ -187,8 +314,43 @@ export const BillbookKhataView: React.FC = () => {
       setPaymentNotes('');
       await loadStatement(selectedOfficeId);
       await loadOffices();
+
+      const curr = offices.find((o) => o.id === selectedOfficeId);
+      if (curr) {
+        const cleanPhone = curr.phone ? curr.phone.replace(/\D/g, '') : '';
+        const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+        const newDue = Math.max(0, curr.balance_due - amt);
+        const pin = curr.client_pin || curr.generated_pin || '----';
+        const formattedDate = new Date(paymentDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+        const waMsg = `Namaste ${curr.name}, payment of ₹${amt} received via ${paymentMode} on ${formattedDate}. Updated Outstanding Khata Balance: ₹${newDue}. View statement with PIN ${pin} at https://chaiwale.co.in/check-bill`;
+        const waUrl = cleanPhone ? `https://wa.me/${fullPhone}?text=${encodeURIComponent(waMsg)}` : undefined;
+
+        setThermalReceiptData({
+          receiptType: 'CREDIT_BILL',
+          invoiceNumber: `SETTLE-${Date.now().toString().slice(-6)}`,
+          date: formattedDate + ', ' + new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+          paymentMode: paymentMode,
+          customerName: curr.name,
+          customerPhone: curr.phone,
+          customerAddress: curr.company_name || curr.floor_unit || undefined,
+          customerPin: pin,
+          customerTotalDue: newDue,
+          items: [{
+            name: `Settlement Payment Received (${paymentMode})`,
+            quantity: 1,
+            unitPrice: amt,
+            lineTotal: amt,
+            notes: paymentNotes || 'Settlement Credit'
+          }],
+          subtotal: amt,
+          paidAmount: amt,
+          grandTotal: 0,
+          whatsAppUrl: waUrl
+        });
+        setThermalReceiptModalOpen(true);
+      }
     } catch (err: any) {
-      alert(err.message || 'Failed to record payment');
+      showAlert('Payment Failed', err.message || 'Failed to record payment', 'error');
     }
   };
 
@@ -199,10 +361,11 @@ export const BillbookKhataView: React.FC = () => {
 
   const triggerWhatsApp = () => {
     if (!statement || !statement.office.phone) {
-      alert('Customer mobile number not found');
+      showAlert('Mobile Missing', 'Customer mobile number is not registered for WhatsApp.', 'warning');
       return;
     }
     const cleanPhone = statement.office.phone.replace(/\D/g, '');
+
     const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
     const url = `https://wa.me/${fullPhone}?text=${encodeURIComponent(statement.whatsappText)}`;
     window.open(url, '_blank');
@@ -331,9 +494,10 @@ export const BillbookKhataView: React.FC = () => {
       </div>
 
       {/* Main Two Column Layout */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      <div className="khata-main-layout" style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* Left Column: Office / Client Directory (340px) */}
         <div
+          className="khata-directory-column"
           style={{
             width: '340px',
             backgroundColor: '#FFFFFF',
@@ -487,7 +651,28 @@ export const BillbookKhataView: React.FC = () => {
                 </div>
 
                 {/* Direct Action Buttons */}
-                <div style={{ display: 'flex', gap: '12px' }}>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => selectedOffice && handleGenerateKhataBillSlip(selectedOffice, statement)}
+                    style={{
+                      background: 'linear-gradient(135deg, #F97316 0%, #EA580C 100%)',
+                      border: 'none',
+                      color: '#FFFFFF',
+                      padding: '10px 18px',
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      boxShadow: '0 4px 14px rgba(249, 115, 22, 0.3)',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    🧾 Generate Bill Slip
+                  </button>
+
                   <button
                     onClick={copyStatementText}
                     style={{
@@ -510,7 +695,7 @@ export const BillbookKhataView: React.FC = () => {
                       backgroundColor: '#25D366',
                       border: 'none',
                       color: '#FFFFFF',
-                      padding: '10px 20px',
+                      padding: '10px 18px',
                       borderRadius: '8px',
                       fontSize: '13px',
                       fontWeight: 800,
@@ -523,12 +708,36 @@ export const BillbookKhataView: React.FC = () => {
                   >
                     💬 Send Bill on WhatsApp
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={() => selectedOffice && handleDeleteOffice(selectedOffice.id, selectedOffice.name)}
+                    style={{
+                      backgroundColor: '#FEF2F2',
+                      border: '1px solid #FECACA',
+                      color: '#DC2626',
+                      padding: '10px 14px',
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#FEE2E2')}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#FEF2F2')}
+                    title="Permanently delete this Khata account"
+                  >
+                    🗑️ Delete Account
+                  </button>
                 </div>
               </div>
 
-              {/* Two Action Input Panels: YOU GAVE vs YOU GOT */}
+              {/* Two Action Input Panels: DEBIT ENTRY (BILL) vs CREDIT ENTRY (PAYMENT) */}
               <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '20px' }}>
-                {/* 1. YOU GAVE (Maal Diya / Daily Canteen Punch) */}
+                {/* 1. DEBIT ENTRY (Order Bill / Daily Consumption Punch) */}
                 <div
                   style={{
                     background: '#FFFFFF',
@@ -539,9 +748,9 @@ export const BillbookKhataView: React.FC = () => {
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
-                    <span style={{ fontSize: '18px' }}>🔴</span>
+                    <span style={{ fontSize: '18px' }}>📑</span>
                     <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#B91C1C' }}>
-                      YOU GAVE (Khata Entry / Samaan Diya)
+                      Debit Entry / Order Bill (Billed Amount)
                     </h4>
                   </div>
 
@@ -572,7 +781,7 @@ export const BillbookKhataView: React.FC = () => {
                     <div style={{ display: 'grid', gridTemplateColumns: '130px 1.2fr 80px 80px', gap: '10px' }}>
                       <div>
                         <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#4B5563', marginBottom: '4px' }}>
-                          Date
+                          Bill Date
                         </label>
                         <input
                           type="date"
@@ -597,7 +806,7 @@ export const BillbookKhataView: React.FC = () => {
                           type="text"
                           value={entryItemName}
                           onChange={(e) => setEntryItemName(e.target.value)}
-                          placeholder="e.g. Chai, Sutta, Mathi..."
+                          placeholder="e.g. Kulhad Chai, Bun Maska, Samosa..."
                           style={{
                             width: '100%',
                             padding: '8px',
@@ -668,13 +877,13 @@ export const BillbookKhataView: React.FC = () => {
                           cursor: 'pointer'
                         }}
                       >
-                        + Add to Khata
+                        + Log Debit Bill
                       </button>
                     </div>
                   </form>
                 </div>
 
-                {/* 2. YOU GOT (Paise Mile / Settlement) */}
+                {/* 2. CREDIT ENTRY (Payment Received / Settlement) */}
                 <div
                   style={{
                     background: '#FFFFFF',
@@ -685,9 +894,9 @@ export const BillbookKhataView: React.FC = () => {
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
-                    <span style={{ fontSize: '18px' }}>🟢</span>
+                    <span style={{ fontSize: '18px' }}>💳</span>
                     <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#047857' }}>
-                      YOU GOT (Paise Mile / Jama)
+                      Credit Entry / Payment Received (Settlement)
                     </h4>
                   </div>
 
@@ -793,7 +1002,7 @@ export const BillbookKhataView: React.FC = () => {
                         width: '100%'
                       }}
                     >
-                      + Save Payment (Jama Kiya)
+                      + Record Settlement (Credit)
                     </button>
                   </form>
                 </div>
@@ -831,7 +1040,7 @@ export const BillbookKhataView: React.FC = () => {
                   </div>
                 ) : !statement || (statement.dateGroups.length === 0 && statement.payments.length === 0) ? (
                   <div style={{ padding: '32px', textAlign: 'center', color: '#9CA3AF', fontSize: '13px' }}>
-                    No consumption entries recorded for this client yet. Use "YOU GAVE" panel above to add daily items.
+                    No consumption entries recorded for this client yet. Use "Debit Entry" panel above to add billing items.
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -1077,6 +1286,40 @@ export const BillbookKhataView: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* 3D Thermal Receipt Modal for Khata */}
+      <ThermalReceiptModal
+        isOpen={thermalReceiptModalOpen}
+        onClose={() => setThermalReceiptModalOpen(false)}
+        data={thermalReceiptData}
+      />
+
+      {/* Custom Chaiwale Alert / Confirm Dialog */}
+      <ChaiwaleDialog
+        config={dialogConfig}
+        onClose={() => setDialogConfig(null)}
+      />
+
+      <style jsx>{`
+        .khata-main-layout {
+          display: flex;
+          flex: 1;
+          overflow: hidden;
+        }
+        @media (max-width: 768px) {
+          .khata-main-layout {
+            flex-direction: column !important;
+            overflow-y: auto !important;
+          }
+          .khata-directory-column {
+            width: 100% !important;
+            max-height: 260px !important;
+            border-right: none !important;
+            border-bottom: 1px solid #E5E7EB !important;
+          }
+        }
+      `}</style>
     </div>
   );
 };
+

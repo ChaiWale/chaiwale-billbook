@@ -84,7 +84,7 @@ export default function BillbookCounterAuth() {
               }}
             >
               <span style={{ width: '6px', height: '6px', backgroundColor: '#34D399', borderRadius: '50%' }} />
-              {user.fullName || user.email} ({user.role})
+              {user.fullName || (user.role === 'ADMIN' ? 'Head Cashier' : 'Counter Operator')} ({user.role})
             </span>
             <button
               onClick={handleSignOut}
