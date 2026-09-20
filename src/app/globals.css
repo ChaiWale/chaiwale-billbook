@@ -1,0 +1,50 @@
+/* ==========================================================================
+   CHAIWALE BILLBOOK DESIGN TOKENS
+   Fast, practical, high-contrast, keyboard-friendly & print-ready tokens.
+   ========================================================================== */
+
+:root {
+  --cw-color-primary: #6F432A;
+  --cw-color-dark: #111827;
+  --cw-color-canvas: #F8FAFC;
+  --cw-color-surface: #FFFFFF;
+  --cw-color-border: #CBD5E1;
+  --cw-color-text-main: #0F172A;
+  --cw-color-text-muted: #475569;
+  --cw-color-accent: #C2410C;
+  --cw-color-success: #15803D;
+  --cw-color-danger: #B91C1C;
+
+  --cw-font-heading: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --cw-font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --cw-font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+
+  --cw-radius-sm: 4px;
+  --cw-radius-md: 6px;
+
+  --cw-shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--cw-font-body);
+  background-color: var(--cw-color-canvas);
+  color: var(--cw-color-text-main);
+  line-height: 1.4;
+}
+
+/* Print Stylesheet for thermal receipt / invoices */
+@media print {
+  body {
+    background: white;
+    color: black;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
