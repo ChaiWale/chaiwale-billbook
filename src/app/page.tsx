@@ -100,6 +100,7 @@ export default function BillbookPosPage() {
   const [invoicesSearch, setInvoicesSearch] = useState<string>('');
   const [invoicesStatusFilter, setInvoicesStatusFilter] = useState<'ALL' | 'PAID' | 'UNPAID'>('ALL');
   const [loadingThermalForInvoiceId, setLoadingThermalForInvoiceId] = useState<string | null>(null);
+  const [selectedInvoice, setSelectedInvoice] = useState<InvoiceRecordDto | null>(null);
 
   // 3D Thermal Receipt Printer Modal State
   const [thermalReceiptModalOpen, setThermalReceiptModalOpen] = useState<boolean>(false);
@@ -439,7 +440,7 @@ export default function BillbookPosPage() {
         subtotal: inv.subtotal,
         discount: inv.discount_amount,
         grandTotal: inv.grand_total,
-        pdfDownloadUrl: getInvoicePdfUrl(inv.id)
+        pdfDownloadUrl: getInvoicePdfUrl(inv.invoice_number)
       });
       setThermalReceiptModalOpen(true);
     } catch (err: any) {
@@ -713,7 +714,7 @@ export default function BillbookPosPage() {
               invoiceNumber: invoiceRes.invoice.invoiceNumber,
               customerPin: finalPin !== '----' ? finalPin : prev.customerPin,
               customerTotalDue: targetOffice ? realDue : prev.customerTotalDue,
-              pdfDownloadUrl: getInvoicePdfUrl(invoiceRes.invoice.id),
+              pdfDownloadUrl: getInvoicePdfUrl(invoiceRes.invoice.invoice_number),
               whatsAppUrl: generatedWaUrl
             }
           : null
@@ -772,7 +773,7 @@ export default function BillbookPosPage() {
         subtotal: invoiceRes.calculation.subtotal,
         discount: invoiceRes.calculation.totalDiscount,
         grandTotal: invoiceRes.calculation.roundedTotal,
-        pdfDownloadUrl: getInvoicePdfUrl(invoiceRes.invoice.id)
+        pdfDownloadUrl: getInvoicePdfUrl(invoiceRes.invoice.invoice_number)
       });
       setThermalReceiptModalOpen(true);
     } catch (err: any) {
@@ -844,7 +845,7 @@ export default function BillbookPosPage() {
       subtotal: sub,
       discount: disc,
       grandTotal: tot,
-      pdfDownloadUrl: lastInvoice?.invoice?.id ? getInvoicePdfUrl(lastInvoice.invoice.id) : undefined,
+      pdfDownloadUrl: lastInvoice?.invoice?.invoice_number ? getInvoicePdfUrl(lastInvoice.invoice.invoice_number) : undefined,
       whatsAppUrl: lastCreditKhataEntry?.whatsAppUrl
     });
     setThermalReceiptModalOpen(true);
@@ -965,51 +966,30 @@ export default function BillbookPosPage() {
 
       {activeTab === 'BILLS' ? (
         /* Bills / Invoices History Tab */
-        <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '20px' }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+        <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '16px' }}>
+          {/* Header */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
             <div>
-              <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                📋 All Generated Bills & Invoices
-              </h2>
-              <p style={{ fontSize: '12px', color: '#64748B', margin: '4px 0 0 0' }}>
-                View all generated bills with Customer Name, Phone, and Payment Mode. Reprint thermal slips or download A4 PDFs anytime.
-              </p>
+              <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0 }}>📋 Bills History</h2>
+              <p style={{ fontSize: '11.5px', color: '#64748B', margin: '3px 0 0 0' }}>Tap any invoice to view details, print slip or download PDF.</p>
             </div>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <button
-                onClick={loadInvoices}
-                disabled={loadingInvoices}
-                style={{
-                  padding: '8px 14px',
-                  backgroundColor: '#F1F5F9',
-                  border: '1px solid #CBD5E1',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  color: '#334155'
-                }}
-              >
-                {loadingInvoices ? '🔄 Refreshing...' : '🔄 Refresh Bills'}
-              </button>
-            </div>
+            <button
+              onClick={loadInvoices}
+              disabled={loadingInvoices}
+              style={{ padding: '7px 12px', backgroundColor: '#F1F5F9', border: '1px solid #CBD5E1', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}
+            >
+              {loadingInvoices ? '🔄 Refreshing...' : '🔄 Refresh'}
+            </button>
           </div>
 
-          {/* Search & Filter Bar */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '16px', alignItems: 'center' }}>
+          {/* Search & Filter */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
             <input
               type="text"
-              placeholder="Search by Invoice #, Customer Name, Mobile Number, Amount..."
+              placeholder="Search Invoice #, Customer, Amount..."
               value={invoicesSearch}
               onChange={(e) => setInvoicesSearch(e.target.value)}
-              style={{
-                flex: '1',
-                minWidth: '240px',
-                padding: '9px 12px',
-                borderRadius: '8px',
-                border: '1px solid #CBD5E1',
-                fontSize: '13px'
-              }}
+              style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px', boxSizing: 'border-box' }}
             />
             <div style={{ display: 'flex', gap: '6px' }}>
               {(['ALL', 'PAID', 'UNPAID'] as const).map((filter) => (
@@ -1017,7 +997,8 @@ export default function BillbookPosPage() {
                   key={filter}
                   onClick={() => setInvoicesStatusFilter(filter)}
                   style={{
-                    padding: '8px 14px',
+                    flex: 1,
+                    padding: '7px 4px',
                     borderRadius: '8px',
                     border: '1px solid',
                     borderColor: invoicesStatusFilter === filter ? 'var(--cw-color-primary)' : '#CBD5E1',
@@ -1028,151 +1009,264 @@ export default function BillbookPosPage() {
                     cursor: 'pointer'
                   }}
                 >
-                  {filter === 'ALL' ? `All (${invoicesList.length})` : filter === 'PAID' ? '✓ Paid' : '⏳ Credit / Unpaid'}
+                  {filter === 'ALL' ? `All (${invoicesList.length})` : filter === 'PAID' ? '✓ Paid' : '⏳ Credit'}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Invoices Table */}
+          {/* Invoice Cards */}
           {loadingInvoices ? (
-            <div style={{ padding: '60px 20px', textAlign: 'center', color: '#64748B' }}>
+            <div style={{ padding: '50px 20px', textAlign: 'center', color: '#64748B' }}>
               <div style={{ fontSize: '24px', marginBottom: '8px' }}>⏳</div>
-              <div>Loading bills history...</div>
+              <div>Loading bills...</div>
             </div>
           ) : filteredInvoices.length === 0 ? (
-            <div style={{ padding: '60px 20px', textAlign: 'center', color: '#64748B', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
+            <div style={{ padding: '50px 20px', textAlign: 'center', color: '#64748B', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
               <div style={{ fontSize: '28px', marginBottom: '8px' }}>🧾</div>
               <div style={{ fontWeight: 700, fontSize: '15px', color: '#1E293B' }}>No Bills Found</div>
               <div style={{ fontSize: '12px', marginTop: '4px' }}>
-                {invoicesSearch ? 'No invoice matches your search criteria.' : 'No invoices generated yet. Create a bill from POS Counter.'}
+                {invoicesSearch ? 'No invoice matches your search.' : 'No invoices generated yet.'}
               </div>
             </div>
           ) : (
-            <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '8px' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px', textAlign: 'left' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '2px solid #E2E8F0' }}>
-                    <th style={{ padding: '12px 14px', fontWeight: 800, color: '#334155' }}>Invoice #</th>
-                    <th style={{ padding: '12px 14px', fontWeight: 800, color: '#334155' }}>Date & Time</th>
-                    <th style={{ padding: '12px 14px', fontWeight: 800, color: '#334155' }}>Customer Name & Mobile</th>
-                    <th style={{ padding: '12px 14px', fontWeight: 800, color: '#334155' }}>Payment Mode</th>
-                    <th style={{ padding: '12px 14px', fontWeight: 800, color: '#334155', textAlign: 'right' }}>Total (₹)</th>
-                    <th style={{ padding: '12px 14px', fontWeight: 800, color: '#334155', textAlign: 'center' }}>Status</th>
-                    <th style={{ padding: '12px 14px', fontWeight: 800, color: '#334155', textAlign: 'center' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredInvoices.map((inv) => {
-                    const rawCust = inv.corporate_clients?.company_name || inv.orders?.delivery_address || inv.department || inv.orders?.customer_name || 'Walk-in Counter';
-                    const isCreditBill = inv.status === 'UNPAID' || inv.invoice_type === 'CORPORATE_CREDIT';
-                    const pMode = inv.orders?.payment_mode || (isCreditBill ? 'CREDIT' : 'CASH');
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {filteredInvoices.map((inv) => {
+                const rawCust = inv.corporate_clients?.company_name || inv.orders?.delivery_address || inv.department || inv.orders?.customer_name || 'Counter Walk-in';
+                const isCreditBill = inv.status === 'UNPAID' || inv.invoice_type === 'CORPORATE_CREDIT';
+                const pMode = inv.orders?.payment_mode || (isCreditBill ? 'CREDIT' : 'CASH');
+                const isPaid = inv.status === 'PAID';
 
-                    return (
-                      <tr key={inv.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                        <td style={{ padding: '10px 14px', fontWeight: 800, fontFamily: 'monospace', color: '#0F172A' }}>
-                          {inv.invoice_number}
-                        </td>
-                        <td style={{ padding: '10px 14px', color: '#475569', whiteSpace: 'nowrap' }}>
-                          {formatISTDate(inv.issued_at || (inv as any).created_at)}
-                          <div style={{ fontSize: '11px', color: '#94A3B8' }}>
-                            {formatISTTime(inv.issued_at || (inv as any).created_at)}
-                          </div>
-                        </td>
-                        <td style={{ padding: '10px 14px' }}>
-                          <div style={{ fontWeight: 700, color: '#1E293B' }}>{rawCust}</div>
-                          {inv.orders?.order_number && (
-                            <div style={{ fontSize: '10.5px', color: '#64748B' }}>Order: {inv.orders.order_number}</div>
-                          )}
-                        </td>
-                        <td style={{ padding: '10px 14px' }}>
-                          <span
-                            style={{
-                              display: 'inline-block',
-                              padding: '2px 8px',
-                              borderRadius: '4px',
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              backgroundColor: pMode === 'UPI' ? '#EFF6FF' : pMode === 'CREDIT' ? '#FEF2F2' : '#F0FDF4',
-                              color: pMode === 'UPI' ? '#1D4ED8' : pMode === 'CREDIT' ? '#DC2626' : '#166534'
-                            }}
-                          >
-                            {pMode}
-                          </span>
-                        </td>
-                        <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 800, fontSize: '13px', color: '#0F172A' }}>
-                          ₹{Number(inv.grand_total).toFixed(0)}
-                        </td>
-                        <td style={{ padding: '10px 14px', textAlign: 'center' }}>
-                          <span
-                            style={{
-                              display: 'inline-block',
-                              padding: '3px 9px',
-                              borderRadius: '999px',
-                              fontSize: '11px',
-                              fontWeight: 800,
-                              backgroundColor: inv.status === 'PAID' ? '#DCFCE7' : '#FEE2E2',
-                              color: inv.status === 'PAID' ? '#15803D' : '#DC2626'
-                            }}
-                          >
-                            {inv.status === 'PAID' ? '✓ PAID' : '⏳ CREDIT'}
-                          </span>
-                        </td>
-                        <td style={{ padding: '10px 14px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                          <div style={{ display: 'inline-flex', gap: '6px' }}>
-                            <button
-                              onClick={() => handleOpenThermalForInvoice(inv)}
-                              disabled={loadingThermalForInvoiceId === inv.id}
-                              style={{
-                                padding: '5px 9px',
-                                backgroundColor: '#F97316',
-                                color: '#FFFFFF',
-                                border: 'none',
-                                borderRadius: '5px',
-                                fontSize: '11px',
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '3px'
-                              }}
-                              title="Print / Save Thermal Slip"
-                            >
-                              {loadingThermalForInvoiceId === inv.id ? '⏳' : '🖨️ Slip'}
-                            </button>
-                            <a
-                              href={getInvoicePdfUrl(inv.id)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{
-                                padding: '5px 9px',
-                                backgroundColor: '#2563EB',
-                                color: '#FFFFFF',
-                                border: 'none',
-                                borderRadius: '5px',
-                                fontSize: '11px',
-                                fontWeight: 700,
-                                textDecoration: 'none',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '3px'
-                              }}
-                              title="Download A4 PDF"
-                            >
-                              📄 PDF
-                            </a>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                return (
+                  <div
+                    key={inv.id}
+                    onClick={() => setSelectedInvoice(inv)}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '12px 14px',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: '10px',
+                      cursor: 'pointer',
+                      backgroundColor: '#FAFAFA',
+                      transition: 'background 0.15s',
+                      gap: '10px'
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#F1F5F9')}
+                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#FAFAFA')}
+                  >
+                    {/* Left: invoice info */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '13px', color: '#0F172A' }}>{inv.invoice_number}</span>
+                        <span style={{
+                          padding: '2px 8px',
+                          borderRadius: '999px',
+                          fontSize: '10.5px',
+                          fontWeight: 800,
+                          backgroundColor: isPaid ? '#DCFCE7' : '#FEE2E2',
+                          color: isPaid ? '#15803D' : '#DC2626'
+                        }}>
+                          {isPaid ? '✓ PAID' : '⏳ CREDIT'}
+                        </span>
+                        <span style={{
+                          padding: '2px 7px',
+                          borderRadius: '4px',
+                          fontSize: '10.5px',
+                          fontWeight: 700,
+                          backgroundColor: pMode === 'UPI' ? '#EFF6FF' : pMode === 'CREDIT' ? '#FEF2F2' : '#F0FDF4',
+                          color: pMode === 'UPI' ? '#1D4ED8' : pMode === 'CREDIT' ? '#DC2626' : '#166534'
+                        }}>
+                          {pMode}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '12.5px', color: '#334155', fontWeight: 600, marginTop: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {rawCust}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px' }}>
+                        {formatISTDate(inv.issued_at || (inv as any).created_at)} · {formatISTTime(inv.issued_at || (inv as any).created_at)}
+                      </div>
+                    </div>
+                    {/* Right: amount + chevron */}
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <div style={{ fontWeight: 900, fontSize: '16px', color: '#0F172A' }}>₹{Number(inv.grand_total).toFixed(0)}</div>
+                      <div style={{ color: '#94A3B8', fontSize: '18px', marginTop: '2px' }}>›</div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
+
+          {/* ── Invoice Detail Bottom-Sheet Modal ── */}
+          {selectedInvoice && (() => {
+            const inv = selectedInvoice;
+            const rawCust = inv.corporate_clients?.company_name || inv.orders?.delivery_address || inv.department || inv.orders?.customer_name || 'Counter Walk-in';
+            const isCreditBill = inv.status === 'UNPAID' || inv.invoice_type === 'CORPORATE_CREDIT';
+            const pMode = inv.orders?.payment_mode || (isCreditBill ? 'CREDIT' : 'CASH');
+            const isPaid = inv.status === 'PAID';
+            const items = inv.orders?.order_items || [];
+
+            return (
+              <div
+                onClick={(e) => { if (e.target === e.currentTarget) setSelectedInvoice(null); }}
+                style={{
+                  position: 'fixed', inset: 0, zIndex: 99990,
+                  background: 'rgba(15,23,42,0.55)',
+                  display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+                  backdropFilter: 'blur(4px)'
+                }}
+              >
+                <div style={{
+                  width: '100%',
+                  maxWidth: '540px',
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: '20px 20px 0 0',
+                  padding: '0 0 env(safe-area-inset-bottom, 16px)',
+                  maxHeight: '90dvh',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  boxShadow: '0 -8px 40px rgba(0,0,0,0.18)'
+                }}>
+                  {/* Drag Handle */}
+                  <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 0' }}>
+                    <div style={{ width: '40px', height: '4px', borderRadius: '99px', backgroundColor: '#CBD5E1' }} />
+                  </div>
+
+                  {/* Header */}
+                  <div style={{ padding: '14px 20px 12px', borderBottom: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <div style={{ fontFamily: 'monospace', fontWeight: 900, fontSize: '17px', color: '#0F172A' }}>{inv.invoice_number}</div>
+                      <div style={{ fontSize: '12.5px', color: '#64748B', marginTop: '2px' }}>
+                        {formatISTDate(inv.issued_at || (inv as any).created_at)} · {formatISTTime(inv.issued_at || (inv as any).created_at)}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{
+                        padding: '4px 12px', borderRadius: '999px', fontSize: '12px', fontWeight: 800,
+                        backgroundColor: isPaid ? '#DCFCE7' : '#FEE2E2',
+                        color: isPaid ? '#15803D' : '#DC2626'
+                      }}>
+                        {isPaid ? '✓ PAID' : '⏳ CREDIT'}
+                      </span>
+                      <button
+                        onClick={() => setSelectedInvoice(null)}
+                        style={{ background: '#F1F5F9', border: 'none', borderRadius: '50%', width: '32px', height: '32px', cursor: 'pointer', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#475569' }}
+                      >×</button>
+                    </div>
+                  </div>
+
+                  {/* Scrollable Body */}
+                  <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
+                    {/* Customer & Payment */}
+                    <div style={{ backgroundColor: '#F8FAFC', borderRadius: '10px', padding: '12px 14px', marginBottom: '14px' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>Customer & Payment</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                        <div>
+                          <div style={{ fontSize: '11px', color: '#64748B' }}>Customer</div>
+                          <div style={{ fontSize: '13px', fontWeight: 700, color: '#1E293B' }}>{rawCust}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '11px', color: '#64748B' }}>Payment</div>
+                          <div style={{ fontSize: '13px', fontWeight: 700, color: '#1E293B' }}>{pMode}</div>
+                        </div>
+                        {inv.orders?.order_number && (
+                          <div>
+                            <div style={{ fontSize: '11px', color: '#64748B' }}>Order #</div>
+                            <div style={{ fontSize: '12px', fontWeight: 600, color: '#475569', fontFamily: 'monospace' }}>{inv.orders.order_number}</div>
+                          </div>
+                        )}
+                        {inv.orders?.customers?.phone && (
+                          <div>
+                            <div style={{ fontSize: '11px', color: '#64748B' }}>Phone</div>
+                            <div style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>{inv.orders.customers.phone}</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Items */}
+                    {items.length > 0 && (
+                      <div style={{ marginBottom: '14px' }}>
+                        <div style={{ fontSize: '11px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>Items Ordered</div>
+                        <div style={{ border: '1px solid #E2E8F0', borderRadius: '8px', overflow: 'hidden' }}>
+                          {items.map((item: any, idx: number) => (
+                            <div key={idx} style={{
+                              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                              padding: '9px 12px',
+                              borderBottom: idx < items.length - 1 ? '1px solid #F1F5F9' : 'none',
+                              backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA'
+                            }}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: '13px', fontWeight: 600, color: '#1E293B' }}>{item.item_name}</div>
+                                <div style={{ fontSize: '11px', color: '#64748B' }}>₹{Number(item.unit_price).toFixed(0)} × {item.quantity}</div>
+                              </div>
+                              <div style={{ fontWeight: 800, fontSize: '13px', color: '#0F172A' }}>₹{Number(item.line_total).toFixed(0)}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Totals */}
+                    <div style={{ backgroundColor: '#F8FAFC', borderRadius: '10px', padding: '12px 14px', marginBottom: '16px' }}>
+                      {Number(inv.discount_amount) > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#64748B', marginBottom: '6px' }}>
+                          <span>Discount</span>
+                          <span style={{ color: '#16A34A' }}>−₹{Number(inv.discount_amount).toFixed(0)}</span>
+                        </div>
+                      )}
+                      {Number(inv.tax_amount) > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#64748B', marginBottom: '6px' }}>
+                          <span>Tax</span>
+                          <span>₹{Number(inv.tax_amount).toFixed(0)}</span>
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900, fontSize: '17px', color: '#0F172A', paddingTop: '8px', borderTop: '1px solid #E2E8F0' }}>
+                        <span>Total</span>
+                        <span>₹{Number(inv.grand_total).toFixed(0)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div style={{ padding: '12px 20px 16px', borderTop: '1px solid #F1F5F9', display: 'flex', gap: '10px' }}>
+                    <button
+                      onClick={async () => {
+                        setSelectedInvoice(null);
+                        await handleOpenThermalForInvoice(inv);
+                      }}
+                      disabled={loadingThermalForInvoiceId === inv.id}
+                      style={{
+                        flex: 1, padding: '13px 8px', backgroundColor: '#F97316', color: '#FFFFFF',
+                        border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 800,
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
+                      }}
+                    >
+                      {loadingThermalForInvoiceId === inv.id ? '⏳' : '🖨️'} Print Slip
+                    </button>
+                    <a
+                      href={getInvoicePdfUrl(inv.invoice_number)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        flex: 1, padding: '13px 8px', backgroundColor: '#1D4ED8', color: '#FFFFFF',
+                        border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 800,
+                        textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
+                      }}
+                    >
+                      📄 A4 PDF
+                    </a>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       ) : activeTab === 'KHATABOOK' ? (
         <BillbookKhataView />
+
       ) : activeTab === 'WEB_ORDERS' ? (
         /* Website Orders Feed Tab */
         <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '20px' }}>
@@ -1331,7 +1425,7 @@ export default function BillbookPosPage() {
                 </button>
                 {lastInvoice?.invoice?.id && (
                   <a
-                    href={getInvoicePdfUrl(lastInvoice.invoice.id)}
+                    href={getInvoicePdfUrl(lastInvoice.invoice.invoice_number)}
                     target="_blank"
                     rel="noreferrer"
                     style={{ padding: '6px 12px', backgroundColor: '#F1F5F9', color: '#0F172A', textDecoration: 'none', borderRadius: '4px', fontWeight: 700, fontSize: '12px', display: 'flex', alignItems: 'center' }}
