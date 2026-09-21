@@ -247,86 +247,89 @@ export const ThermalReceiptModal: React.FC<Props> = ({ isOpen, onClose, data }) 
 
         {/* 3D Dispenser Machine Unit */}
         <div style={{ width: '100%', maxWidth: '350px', position: 'relative', zIndex: 30, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          {/* Top 3D Metallic Hood */}
-          <div
-            style={{
-              width: '100%',
-              height: '34px',
-              borderRadius: '12px 12px 4px 4px',
-              background: 'linear-gradient(180deg, #FFFFFF 0%, #F5E8D3 20%, #D4A359 55%, #9E6D2B 100%)',
-              boxShadow: '0 -2px 6px rgba(255, 255, 255, 0.8), 0 6px 16px rgba(158, 109, 43, 0.3), inset 0 2px 2px rgba(255, 255, 255, 0.9), inset 0 -2px 4px rgba(80, 50, 10, 0.45)',
-              position: 'relative',
-              overflow: 'hidden',
-              zIndex: 25,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-          >
+          {/* Top 3D Metallic Hood Unit */}
+          <div className="receipt-dispenser-hood-unit" style={{ width: '100%' }}>
+            <div
+              style={{
+                width: '100%',
+                height: '34px',
+                borderRadius: '12px 12px 4px 4px',
+                background: 'linear-gradient(180deg, #FFFFFF 0%, #F5E8D3 20%, #D4A359 55%, #9E6D2B 100%)',
+                boxShadow: '0 -2px 6px rgba(255, 255, 255, 0.8), 0 6px 16px rgba(158, 109, 43, 0.3), inset 0 2px 2px rgba(255, 255, 255, 0.9), inset 0 -2px 4px rgba(80, 50, 10, 0.45)',
+                position: 'relative',
+                overflow: 'hidden',
+                zIndex: 25,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '3px',
+                  left: '5%',
+                  width: '90%',
+                  height: '4px',
+                  background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.9) 50%, transparent 100%)',
+                  borderRadius: '999px',
+                  filter: 'blur(1px)'
+                }}
+              />
+              <span style={{ fontSize: '10.5px', fontWeight: 900, letterSpacing: '2px', color: '#543209', textShadow: '0 1px 0 rgba(255,255,255,0.5)' }}>
+                CHAIWALE THERMAL DISPENSER
+              </span>
+            </div>
+
+            {/* Slit mouth where paper emerges */}
+            <div
+              style={{
+                width: '90%',
+                margin: '-4px auto 0',
+                height: '8px',
+                background: '#0a0805',
+                borderRadius: '2px',
+                boxShadow: 'inset 0 4px 8px rgba(0,0,0,0.95), inset 0 -1px 2px rgba(255,255,255,0.2)',
+                position: 'relative',
+                zIndex: 5
+              }}
+            />
+
+            {/* Cutter Flash Blade */}
             <div
               style={{
                 position: 'absolute',
-                top: '3px',
+                top: '38px',
                 left: '5%',
                 width: '90%',
-                height: '4px',
-                background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.9) 50%, transparent 100%)',
-                borderRadius: '999px',
-                filter: 'blur(1px)'
+                height: '3px',
+                background: '#FFFFFF',
+                boxShadow: '0 0 16px #FFFFFF',
+                zIndex: 35,
+                opacity: cutterFlash ? 1 : 0,
+                transition: 'opacity 0.2s ease',
+                pointerEvents: 'none'
               }}
             />
-            <span style={{ fontSize: '10.5px', fontWeight: 900, letterSpacing: '2px', color: '#543209', textShadow: '0 1px 0 rgba(255,255,255,0.5)' }}>
-              CHAIWALE THERMAL DISPENSER
-            </span>
+
+            {/* Bottom Lip */}
+            <div
+              style={{
+                width: '100%',
+                height: '10px',
+                marginTop: '-2px',
+                borderRadius: '0 0 10px 10px',
+                background: 'linear-gradient(180deg, #8C5F22 0%, #C49852 40%, #F5E8D3 100%)',
+                boxShadow: '0 6px 14px rgba(0, 0, 0, 0.25)',
+                position: 'relative',
+                zIndex: 10
+              }}
+            />
           </div>
-
-          {/* Slit mouth where paper emerges */}
-          <div
-            style={{
-              width: '90%',
-              margin: '-4px auto 0',
-              height: '8px',
-              background: '#0a0805',
-              borderRadius: '2px',
-              boxShadow: 'inset 0 4px 8px rgba(0,0,0,0.95), inset 0 -1px 2px rgba(255,255,255,0.2)',
-              position: 'relative',
-              zIndex: 5
-            }}
-          />
-
-          {/* Cutter Flash Blade */}
-          <div
-            style={{
-              position: 'absolute',
-              top: '38px',
-              left: '5%',
-              width: '90%',
-              height: '3px',
-              background: '#FFFFFF',
-              boxShadow: '0 0 16px #FFFFFF',
-              zIndex: 35,
-              opacity: cutterFlash ? 1 : 0,
-              transition: 'opacity 0.2s ease',
-              pointerEvents: 'none'
-            }}
-          />
-
-          {/* Bottom Lip */}
-          <div
-            style={{
-              width: '100%',
-              height: '10px',
-              marginTop: '-2px',
-              borderRadius: '0 0 10px 10px',
-              background: 'linear-gradient(180deg, #8C5F22 0%, #C49852 40%, #F5E8D3 100%)',
-              boxShadow: '0 6px 14px rgba(0, 0, 0, 0.25)',
-              position: 'relative',
-              zIndex: 10
-            }}
-          />
 
           {/* Paper Viewport */}
           <div
+            className="receipt-paper-viewport"
             style={{
               position: 'relative',
               width: '100%',
@@ -626,26 +629,27 @@ export const ThermalReceiptModal: React.FC<Props> = ({ isOpen, onClose, data }) 
             maxWidth: '380px'
           }}
         >
-          {/* Print Slip Button */}
+          {/* Save / Print as PDF Button */}
           <button
             type="button"
             onClick={handlePrint}
+            title="Save as PDF or Print on Thermal Printer"
             style={{
               background: 'linear-gradient(135deg, #F97316 0%, #EA580C 100%)',
               color: '#FFFFFF',
               border: 'none',
               borderRadius: '50px',
-              padding: '7px 15px',
+              padding: '7px 16px',
               fontWeight: 800,
               fontSize: '12px',
               cursor: 'pointer',
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '5px',
+              gap: '6px',
               boxShadow: '0 4px 12px rgba(249, 115, 22, 0.4)'
             }}
           >
-            🖨️ Print Slip
+            🖨️ / 💾 Save / Print as PDF
           </button>
 
           {/* Toggle KOT / Customer Bill */}
@@ -803,10 +807,22 @@ export const ThermalReceiptModal: React.FC<Props> = ({ isOpen, onClose, data }) 
         }
 
         @media print {
+          @page {
+            size: auto;
+            margin: 4mm;
+          }
+          body {
+            background: #FFFFFF !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
           body * {
             visibility: hidden !important;
           }
           .receipt-modal-backdrop,
+          .receipt-modal-backdrop * {
+            visibility: hidden !important;
+          }
           #chaiwale-receipt-slip,
           #chaiwale-receipt-slip * {
             visibility: visible !important;
@@ -816,20 +832,47 @@ export const ThermalReceiptModal: React.FC<Props> = ({ isOpen, onClose, data }) 
             background: transparent !important;
             padding: 0 !important;
             backdrop-filter: none !important;
+            overflow: visible !important;
+            inset: auto !important;
+            display: block !important;
           }
+          .receipt-modal-backdrop > div {
+            position: static !important;
+            max-width: none !important;
+            max-height: none !important;
+            height: auto !important;
+            overflow: visible !important;
+            animation: none !important;
+            display: block !important;
+          }
+          .receipt-dispenser-hood-unit,
           .receipt-action-buttons,
-          button {
+          .receipt-modal-backdrop button {
             display: none !important;
+          }
+          .receipt-paper-viewport {
+            position: static !important;
+            max-height: none !important;
+            height: auto !important;
+            overflow: visible !important;
+            perspective: none !important;
+            display: block !important;
           }
           #chaiwale-receipt-slip {
             position: static !important;
-            transform: none !important;
             width: 100% !important;
             max-width: 320px !important;
             margin: 0 auto !important;
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            transform: none !important;
+            animation: none !important;
             box-shadow: none !important;
             clip-path: none !important;
-            border: 1px solid #ccc !important;
+            border: 1px dashed #71717A !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
           }
         }
       `}</style>

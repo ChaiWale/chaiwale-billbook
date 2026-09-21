@@ -100,6 +100,13 @@ export interface InvoiceRecordDto {
     customer_name?: string;
     order_type?: string;
     payment_mode?: string;
+    delivery_address?: string;
+    order_items?: Array<{
+      item_name: string;
+      unit_price: number;
+      quantity: number;
+      line_total: number;
+    }>;
   } | null;
 }
 
@@ -742,4 +749,42 @@ export async function deleteKhataOffice(id: string): Promise<void> {
     throw new Error(err.message || 'Failed to delete Khata account');
   }
 }
+
+/**
+ * Get direct download URL for Date-wise Khata Excel report (.xlsx)
+ */
+export function getKhataExcelExportUrl(params?: {
+  startDate?: string;
+  endDate?: string;
+  office_id?: string;
+}): string {
+  const token = getBillbookAuthToken();
+  const query = new URLSearchParams();
+  if (token) query.set('token', token);
+  if (params?.startDate) query.set('startDate', params.startDate);
+  if (params?.endDate) query.set('endDate', params.endDate);
+  if (params?.office_id) query.set('office_id', params.office_id);
+  return `${BACKEND_URL}/api/v1/khata/export/excel?${query.toString()}`;
+}
+
+/**
+ * Get direct streaming/download URL for Customer Date-wise Khata PDF bill
+ */
+export function getKhataStatementPdfUrl(
+  officeId: string,
+  params?: {
+    startDate?: string;
+    endDate?: string;
+    pin?: string;
+  }
+): string {
+  const token = getBillbookAuthToken();
+  const query = new URLSearchParams();
+  if (token) query.set('token', token);
+  if (params?.pin) query.set('pin', params.pin);
+  if (params?.startDate) query.set('startDate', params.startDate);
+  if (params?.endDate) query.set('endDate', params.endDate);
+  return `${BACKEND_URL}/api/v1/khata/statement/${encodeURIComponent(officeId)}/pdf?${query.toString()}`;
+}
+
 

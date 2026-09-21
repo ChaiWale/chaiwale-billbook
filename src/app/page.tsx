@@ -12,11 +12,14 @@ import {
   fetchKhataOffices,
   createKhataOffice,
   addKhataEntry,
+  fetchInvoices,
+  fetchInvoiceById,
   MenuItemDto,
   BillingCalculationResultDto,
   GeneratedInvoiceResponseDto,
   WebOrderDto,
-  KhataOfficeDto
+  KhataOfficeDto,
+  InvoiceRecordDto
 } from '../services/billbook-api.client';
 import { BillbookKhataView } from '../components/BillbookKhataView';
 import { ThermalReceiptModal, ThermalReceiptData } from '../components/ThermalReceiptModal';
@@ -31,7 +34,7 @@ interface CartLineItem {
 }
 
 export default function BillbookPosPage() {
-  const [activeTab, setActiveTab] = useState<'POS' | 'KHATABOOK' | 'WEB_ORDERS'>('POS');
+  const [activeTab, setActiveTab] = useState<'POS' | 'BILLS' | 'KHATABOOK' | 'WEB_ORDERS'>('POS');
 
   // Menu catalog state
   const [menuItems, setMenuItems] = useState<MenuItemDto[]>([]);
@@ -47,6 +50,20 @@ export default function BillbookPosPage() {
   const [discountPercent, setDiscountPercent] = useState<number>(0);
   const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [billDate, setBillDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+
+  // Walk-in / Counter Customer Name & Mobile (Optional for Cash/UPI, prints on bill)
+  const [walkinCustomerName, setWalkinCustomerName] = useState<string>('');
+  const [walkinCustomerPhone, setWalkinCustomerPhone] = useState<string>('');
+
+  // UPI QR Modal State
+  const [showUpiModal, setShowUpiModal] = useState<boolean>(false);
+
+  // Invoices / Bills History State
+  const [invoicesList, setInvoicesList] = useState<InvoiceRecordDto[]>([]);
+  const [loadingInvoices, setLoadingInvoices] = useState<boolean>(false);
+  const [invoicesSearch, setInvoicesSearch] = useState<string>('');
+  const [invoicesStatusFilter, setInvoicesStatusFilter] = useState<'ALL' | 'PAID' | 'UNPAID'>('ALL');
+  const [loadingThermalForInvoiceId, setLoadingThermalForInvoiceId] = useState<string | null>(null);
 
   // 3D Thermal Receipt Printer Modal State
   const [thermalReceiptModalOpen, setThermalReceiptModalOpen] = useState<boolean>(false);
@@ -90,6 +107,12 @@ export default function BillbookPosPage() {
 
   // Cart State
   const [cart, setCart] = useState<CartLineItem[]>([]);
+
+  // Custom / Offline Counter Items State (Cigarette, Cold Drinks, Miscellaneous)
+  const [showCustomItemModal, setShowCustomItemModal] = useState<boolean>(false);
+  const [customItemName, setCustomItemName] = useState<string>('');
+  const [customItemPrice, setCustomItemPrice] = useState<string>('');
+  const [customItemQuantity, setCustomItemQuantity] = useState<number>(1);
 
   // Click outside to close search dropdown
   useEffect(() => {
@@ -291,11 +314,104 @@ export default function BillbookPosPage() {
     }
   };
 
-  useEffect(() => {
-    if (activeTab === 'WEB_ORDERS') {
-      loadOnlineOrders();
+  // Load past invoices for Bills history
+  const loadInvoices = useCallback(async () => {
+    setLoadingInvoices(true);
+    try {
+      const data = await fetchInvoices({ limit: 100 });
+      setInvoicesList(data);
+    } catch (err: any) {
+      console.error('Failed to load invoices:', err);
+    } finally {
+      setLoadingInvoices(false);
     }
-  }, [activeTab]);
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'BILLS') {
+      loadInvoices();
+    }
+  }, [activeTab, loadInvoices]);
+
+  // Filtered invoices for Bills History tab
+  const filteredInvoices = useMemo(() => {
+    let list = invoicesList;
+    if (invoicesStatusFilter !== 'ALL') {
+      list = list.filter((inv) => inv.status === invoicesStatusFilter);
+    }
+    const q = invoicesSearch.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter((inv) => {
+      const invNum = inv.invoice_number?.toLowerCase() || '';
+      const rawCust = [
+        inv.corporate_clients?.company_name,
+        inv.orders?.delivery_address,
+        inv.department,
+        inv.orders?.customer_name,
+        inv.orders?.order_number
+      ].filter(Boolean).join(' ').toLowerCase();
+      const grandTotalStr = String(inv.grand_total);
+      return invNum.includes(q) || rawCust.includes(q) || grandTotalStr.includes(q);
+    });
+  }, [invoicesList, invoicesStatusFilter, invoicesSearch]);
+
+  // Open thermal slip for any past invoice from Bills history
+  const handleOpenThermalForInvoice = async (inv: InvoiceRecordDto) => {
+    setLoadingThermalForInvoiceId(inv.id);
+    try {
+      let fullDetail: any = null;
+      try {
+        fullDetail = await fetchInvoiceById(inv.id);
+      } catch {
+        fullDetail = inv;
+      }
+
+      const rawItems = fullDetail?.orders?.order_items || (inv as any).orders?.order_items || [];
+      const printableItems = rawItems.length > 0
+        ? rawItems.map((it: any) => ({
+            name: it.item_name,
+            quantity: Number(it.quantity || 1),
+            unitPrice: Number(it.unit_price || 0),
+            lineTotal: Number(it.line_total || (Number(it.unit_price) * Number(it.quantity)))
+          }))
+        : [
+            {
+              name: 'Counter Order Items',
+              quantity: 1,
+              unitPrice: Number(inv.grand_total),
+              lineTotal: Number(inv.grand_total)
+            }
+          ];
+
+      const clientInfo = inv.corporate_clients?.company_name || inv.department || inv.orders?.delivery_address || 'Walk-in Customer';
+      const phoneMatch = clientInfo.match(/\(?(\d{10})\)?/);
+      const custPhone = phoneMatch ? phoneMatch[1] : '';
+      const custName = clientInfo.replace(/\(?\d{10}\)?/, '').replace(/[()]/g, '').trim();
+
+      const payMode = (inv.orders?.payment_mode || (inv.status === 'UNPAID' ? 'CREDIT' : 'CASH')) as any;
+
+      setThermalReceiptData({
+        receiptType: inv.status === 'UNPAID' || inv.invoice_type === 'CORPORATE_CREDIT' ? 'CREDIT_BILL' : 'CUSTOMER_BILL',
+        invoiceNumber: inv.invoice_number,
+        date: new Date(inv.issued_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) + ', ' + new Date(inv.issued_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+        paymentMode: payMode,
+        customerName: custName || undefined,
+        customerPhone: custPhone || undefined,
+        customerAddress: inv.department || undefined,
+        customerTotalDue: inv.outstanding_amount > 0 ? inv.outstanding_amount : undefined,
+        items: printableItems,
+        subtotal: inv.subtotal,
+        discount: inv.discount_amount,
+        grandTotal: inv.grand_total,
+        pdfDownloadUrl: getInvoicePdfUrl(inv.id)
+      });
+      setThermalReceiptModalOpen(true);
+    } catch (err: any) {
+      showAlert('Receipt Error', `Failed to open thermal receipt: ${err.message}`, 'error');
+    } finally {
+      setLoadingThermalForInvoiceId(null);
+    }
+  };
 
   // Cart operations
   const addItemToCart = (itemToAdd?: { productId: string; name: string; unitPrice: number }, qty?: number) => {
@@ -334,6 +450,49 @@ export default function BillbookPosPage() {
 
     setInputQuantity(1);
     setIsSearchOpen(false);
+  };
+
+  // Open Custom / Offline Item Dialog (Pre-populates name and default rate if chosen)
+  const handleOpenCustomItem = (initialName = '', defaultPrice = '') => {
+    setCustomItemName(initialName);
+    setCustomItemPrice(defaultPrice);
+    setCustomItemQuantity(1);
+    setShowCustomItemModal(true);
+  };
+
+  // Add Custom / Offline Item to Active Bill Cart
+  const handleAddCustomItemToCart = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const name = customItemName.trim();
+    const price = Number(customItemPrice);
+    const qty = Number(customItemQuantity);
+
+    if (!name) {
+      showAlert('Item Name Required', 'Kripya item ka naam likhein (e.g. Cigarette, Cold Drink, Lighter).', 'warning');
+      return;
+    }
+    if (isNaN(price) || price < 0) {
+      showAlert('Invalid Price', 'Kripya sahi rate (₹) bharein.', 'warning');
+      return;
+    }
+    if (isNaN(qty) || qty <= 0) {
+      showAlert('Invalid Quantity', 'Kripya item quantity 1 ya usse zyada bharein.', 'warning');
+      return;
+    }
+
+    addItemToCart(
+      {
+        productId: `custom-${Date.now()}`,
+        name,
+        unitPrice: price
+      },
+      qty
+    );
+
+    setShowCustomItemModal(false);
+    setCustomItemName('');
+    setCustomItemPrice('');
+    setCustomItemQuantity(1);
   };
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -385,10 +544,13 @@ export default function BillbookPosPage() {
     const isCredit = paymentMode === 'CREDIT' || customerType === 'Credit' || customerType === 'Corporate Bill';
     let targetOffice = selectedKhataOffice;
 
+    const effCustName = targetOffice?.name || newCustomerName.trim() || walkinCustomerName.trim();
+    const effCustPhone = targetOffice?.phone || newCustomerPhone.trim() || walkinCustomerPhone.trim();
+
     if (isCredit) {
       if (!targetOffice) {
-        if (!newCustomerName.trim() || !newCustomerPhone.trim()) {
-          showAlert('Customer Details Required', 'Credit / Khata bill ke liye Customer ka Name aur Mobile number zaroori hai. Kripya customer search karein ya new customer details bharein.', 'warning');
+        if (!effCustName || !effCustPhone) {
+          showAlert('Customer Details Required', 'Credit / Khata bill ke liye Customer ka Name aur Mobile number mandatory hai. Kripya customer search karein ya customer details bharein.', 'warning');
           return;
         }
       }
@@ -417,9 +579,9 @@ export default function BillbookPosPage() {
       invoiceNumber: tempInvNum,
       date: new Date(billDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) + ', ' + new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
       paymentMode: isCredit ? 'CREDIT' : paymentMode,
-      customerName: targetOffice?.name || newCustomerName.trim() || undefined,
-      customerPhone: targetOffice?.phone || newCustomerPhone.trim() || undefined,
-      customerAddress: targetOffice?.company_name || targetOffice?.floor_unit || department || undefined,
+      customerName: effCustName || undefined,
+      customerPhone: effCustPhone || undefined,
+      customerAddress: targetOffice?.company_name || targetOffice?.floor_unit || (effCustName ? `${effCustName}${effCustPhone ? ` (${effCustPhone})` : ''}` : department) || undefined,
       customerPin: pin !== '----' ? pin : undefined,
       customerTotalDue: targetOffice ? initialDue : undefined,
       items: printableItems,
@@ -434,8 +596,8 @@ export default function BillbookPosPage() {
       if (isCredit && !targetOffice) {
         try {
           const created = await createKhataOffice({
-            name: newCustomerName.trim(),
-            phone: newCustomerPhone.trim(),
+            name: (newCustomerName.trim() || effCustName),
+            phone: (newCustomerPhone.trim() || effCustPhone),
             company_name: newCustomerCompany.trim() || companyName.trim() || undefined,
             floor_unit: newCustomerFloor.trim() || department.trim() || undefined,
             notes: 'Auto-registered via POS Counter-01 (Credit Bill)'
@@ -456,9 +618,9 @@ export default function BillbookPosPage() {
       const invoiceRes = await generateInvoice({
         invoiceType: invType,
         corporateClientId: targetOffice?.id || undefined,
-        department: targetOffice?.company_name || targetOffice?.floor_unit || department || undefined,
-        customerName: targetOffice?.name || newCustomerName.trim() || undefined,
-        customerPhone: targetOffice?.phone || newCustomerPhone.trim() || undefined,
+        department: targetOffice?.company_name || targetOffice?.floor_unit || (effCustName ? `${effCustName}${effCustPhone ? ` (${effCustPhone})` : ''}` : department) || undefined,
+        customerName: effCustName || undefined,
+        customerPhone: effCustPhone || undefined,
         issueDate: billDate,
         paymentMode: isCredit ? 'CREDIT' : paymentMode,
         transactionRef: transactionRef || undefined,
@@ -525,6 +687,7 @@ export default function BillbookPosPage() {
       if (isCredit) {
         fetchKhataOffices().then(setKhataOffices).catch(() => {});
       }
+      loadInvoices();
     } catch (err: any) {
       if (err.message?.includes('Authentication required') || err.message?.includes('Missing Bearer token')) {
         window.dispatchEvent(new CustomEvent('open-counter-auth'));
@@ -666,6 +829,8 @@ export default function BillbookPosPage() {
     setNewCustomerPhone('');
     setNewCustomerCompany('');
     setNewCustomerFloor('');
+    setWalkinCustomerName('');
+    setWalkinCustomerPhone('');
     setLastCreditKhataEntry(null);
   };
 
@@ -707,6 +872,27 @@ export default function BillbookPosPage() {
           🧾 New Bill (POS Counter)
         </button>
         <button
+          onClick={() => {
+            setActiveTab('BILLS');
+            loadInvoices();
+          }}
+          style={{
+            padding: '10px 20px',
+            borderRadius: '8px',
+            fontWeight: 800,
+            fontSize: '14px',
+            border: 'none',
+            cursor: 'pointer',
+            backgroundColor: activeTab === 'BILLS' ? 'var(--cw-color-primary)' : 'transparent',
+            color: activeTab === 'BILLS' ? '#FFFFFF' : '#64748B',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}
+        >
+          📋 Bills History ({invoicesList.length})
+        </button>
+        <button
           onClick={() => setActiveTab('KHATABOOK')}
           style={{
             padding: '10px 20px',
@@ -741,7 +927,215 @@ export default function BillbookPosPage() {
         </button>
       </div>
 
-      {activeTab === 'KHATABOOK' ? (
+      {activeTab === 'BILLS' ? (
+        /* Bills / Invoices History Tab */
+        <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '20px' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+            <div>
+              <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                📋 All Generated Bills & Invoices
+              </h2>
+              <p style={{ fontSize: '12px', color: '#64748B', margin: '4px 0 0 0' }}>
+                View all generated bills with Customer Name, Phone, and Payment Mode. Reprint thermal slips or download A4 PDFs anytime.
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <button
+                onClick={loadInvoices}
+                disabled={loadingInvoices}
+                style={{
+                  padding: '8px 14px',
+                  backgroundColor: '#F1F5F9',
+                  border: '1px solid #CBD5E1',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  color: '#334155'
+                }}
+              >
+                {loadingInvoices ? '🔄 Refreshing...' : '🔄 Refresh Bills'}
+              </button>
+            </div>
+          </div>
+
+          {/* Search & Filter Bar */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '16px', alignItems: 'center' }}>
+            <input
+              type="text"
+              placeholder="Search by Invoice #, Customer Name, Mobile Number, Amount..."
+              value={invoicesSearch}
+              onChange={(e) => setInvoicesSearch(e.target.value)}
+              style={{
+                flex: '1',
+                minWidth: '240px',
+                padding: '9px 12px',
+                borderRadius: '8px',
+                border: '1px solid #CBD5E1',
+                fontSize: '13px'
+              }}
+            />
+            <div style={{ display: 'flex', gap: '6px' }}>
+              {(['ALL', 'PAID', 'UNPAID'] as const).map((filter) => (
+                <button
+                  key={filter}
+                  onClick={() => setInvoicesStatusFilter(filter)}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid',
+                    borderColor: invoicesStatusFilter === filter ? 'var(--cw-color-primary)' : '#CBD5E1',
+                    backgroundColor: invoicesStatusFilter === filter ? 'var(--cw-color-primary)' : '#FFFFFF',
+                    color: invoicesStatusFilter === filter ? '#FFFFFF' : '#475569',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  {filter === 'ALL' ? `All (${invoicesList.length})` : filter === 'PAID' ? '✓ Paid' : '⏳ Credit / Unpaid'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Invoices Table */}
+          {loadingInvoices ? (
+            <div style={{ padding: '60px 20px', textAlign: 'center', color: '#64748B' }}>
+              <div style={{ fontSize: '24px', marginBottom: '8px' }}>⏳</div>
+              <div>Loading bills history...</div>
+            </div>
+          ) : filteredInvoices.length === 0 ? (
+            <div style={{ padding: '60px 20px', textAlign: 'center', color: '#64748B', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
+              <div style={{ fontSize: '28px', marginBottom: '8px' }}>🧾</div>
+              <div style={{ fontWeight: 700, fontSize: '15px', color: '#1E293B' }}>No Bills Found</div>
+              <div style={{ fontSize: '12px', marginTop: '4px' }}>
+                {invoicesSearch ? 'No invoice matches your search criteria.' : 'No invoices generated yet. Create a bill from POS Counter.'}
+              </div>
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '8px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '2px solid #E2E8F0' }}>
+                    <th style={{ padding: '12px 14px', fontWeight: 800, color: '#334155' }}>Invoice #</th>
+                    <th style={{ padding: '12px 14px', fontWeight: 800, color: '#334155' }}>Date & Time</th>
+                    <th style={{ padding: '12px 14px', fontWeight: 800, color: '#334155' }}>Customer Name & Mobile</th>
+                    <th style={{ padding: '12px 14px', fontWeight: 800, color: '#334155' }}>Payment Mode</th>
+                    <th style={{ padding: '12px 14px', fontWeight: 800, color: '#334155', textAlign: 'right' }}>Total (₹)</th>
+                    <th style={{ padding: '12px 14px', fontWeight: 800, color: '#334155', textAlign: 'center' }}>Status</th>
+                    <th style={{ padding: '12px 14px', fontWeight: 800, color: '#334155', textAlign: 'center' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredInvoices.map((inv) => {
+                    const rawCust = inv.corporate_clients?.company_name || inv.orders?.delivery_address || inv.department || inv.orders?.customer_name || 'Walk-in Counter';
+                    const isCreditBill = inv.status === 'UNPAID' || inv.invoice_type === 'CORPORATE_CREDIT';
+                    const pMode = inv.orders?.payment_mode || (isCreditBill ? 'CREDIT' : 'CASH');
+
+                    return (
+                      <tr key={inv.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                        <td style={{ padding: '10px 14px', fontWeight: 800, fontFamily: 'monospace', color: '#0F172A' }}>
+                          {inv.invoice_number}
+                        </td>
+                        <td style={{ padding: '10px 14px', color: '#475569', whiteSpace: 'nowrap' }}>
+                          {new Date(inv.issued_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          <div style={{ fontSize: '11px', color: '#94A3B8' }}>
+                            {new Date(inv.issued_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        </td>
+                        <td style={{ padding: '10px 14px' }}>
+                          <div style={{ fontWeight: 700, color: '#1E293B' }}>{rawCust}</div>
+                          {inv.orders?.order_number && (
+                            <div style={{ fontSize: '10.5px', color: '#64748B' }}>Order: {inv.orders.order_number}</div>
+                          )}
+                        </td>
+                        <td style={{ padding: '10px 14px' }}>
+                          <span
+                            style={{
+                              display: 'inline-block',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              backgroundColor: pMode === 'UPI' ? '#EFF6FF' : pMode === 'CREDIT' ? '#FEF2F2' : '#F0FDF4',
+                              color: pMode === 'UPI' ? '#1D4ED8' : pMode === 'CREDIT' ? '#DC2626' : '#166534'
+                            }}
+                          >
+                            {pMode}
+                          </span>
+                        </td>
+                        <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 800, fontSize: '13px', color: '#0F172A' }}>
+                          ₹{Number(inv.grand_total).toFixed(0)}
+                        </td>
+                        <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                          <span
+                            style={{
+                              display: 'inline-block',
+                              padding: '3px 9px',
+                              borderRadius: '999px',
+                              fontSize: '11px',
+                              fontWeight: 800,
+                              backgroundColor: inv.status === 'PAID' ? '#DCFCE7' : '#FEE2E2',
+                              color: inv.status === 'PAID' ? '#15803D' : '#DC2626'
+                            }}
+                          >
+                            {inv.status === 'PAID' ? '✓ PAID' : '⏳ CREDIT'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '10px 14px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                          <div style={{ display: 'inline-flex', gap: '6px' }}>
+                            <button
+                              onClick={() => handleOpenThermalForInvoice(inv)}
+                              disabled={loadingThermalForInvoiceId === inv.id}
+                              style={{
+                                padding: '5px 9px',
+                                backgroundColor: '#F97316',
+                                color: '#FFFFFF',
+                                border: 'none',
+                                borderRadius: '5px',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px'
+                              }}
+                              title="Print / Save Thermal Slip"
+                            >
+                              {loadingThermalForInvoiceId === inv.id ? '⏳' : '🖨️ Slip'}
+                            </button>
+                            <a
+                              href={getInvoicePdfUrl(inv.id)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{
+                                padding: '5px 9px',
+                                backgroundColor: '#2563EB',
+                                color: '#FFFFFF',
+                                border: 'none',
+                                borderRadius: '5px',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                textDecoration: 'none',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px'
+                              }}
+                              title="Download A4 PDF"
+                            >
+                              📄 PDF
+                            </a>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : activeTab === 'KHATABOOK' ? (
         <BillbookKhataView />
       ) : activeTab === 'WEB_ORDERS' ? (
         /* Website Orders Feed Tab */
@@ -1032,6 +1426,29 @@ export default function BillbookPosPage() {
                     >
                       <span>+ Add to Bill</span>
                     </button>
+
+                    {/* Custom / Offline Item Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleOpenCustomItem(searchItemText.trim(), '')}
+                      style={{
+                        padding: '11px 18px',
+                        backgroundColor: '#0F172A',
+                        color: '#FFF',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontWeight: 700,
+                        fontSize: '13px',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                      title="Add offline counter item (Cigarette, Cold Drinks, etc.) with custom rate"
+                    >
+                      <span>✨ + Custom Item</span>
+                    </button>
                   </div>
                 </div>
 
@@ -1055,109 +1472,154 @@ export default function BillbookPosPage() {
                   >
                     {filteredBillableItems.length === 0 ? (
                       <div style={{ padding: '16px', textAlign: 'center', color: '#64748B', fontSize: '13px' }}>
-                        No menu items found matching "{searchItemText}"
+                        <div>No online catalog items found matching "{searchItemText}"</div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleOpenCustomItem(searchItemText.trim(), '');
+                            setIsSearchOpen(false);
+                          }}
+                          style={{
+                            marginTop: '10px',
+                            padding: '7px 16px',
+                            backgroundColor: 'var(--cw-color-primary, #C85A17)',
+                            color: '#FFFFFF',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          ✨ Add "{searchItemText}" as Custom / Offline Item (₹)
+                        </button>
                       </div>
                     ) : (
-                      filteredBillableItems.map((item, idx) => {
-                        const isHighlighted = idx === highlightedIndex;
-                        return (
-                          <div
-                            key={item.productId}
-                            onMouseEnter={() => setHighlightedIndex(idx)}
-                            onClick={() => {
-                              setSelectedProductId(item.productId);
-                              addItemToCart({ productId: item.productId, name: item.name, unitPrice: item.unitPrice }, inputQuantity);
-                              setSearchItemText('');
-                              setIsSearchOpen(false);
-                            }}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              padding: '10px 14px',
-                              cursor: 'pointer',
-                              backgroundColor: isHighlighted ? '#F1F5F9' : '#FFFFFF',
-                              borderBottom: '1px solid #F1F5F9',
-                              transition: 'background-color 0.15s'
-                            }}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                              {/* Veg / Non-Veg Badge */}
-                              <span
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  width: '16px',
-                                  height: '16px',
-                                  border: `1.5px solid ${item.is_veg ? '#16A34A' : (item.is_egg ? '#EAB308' : '#DC2626')}`,
-                                  borderRadius: '3px',
-                                  padding: '1px'
-                                }}
-                                title={item.is_veg ? 'Pure Veg' : (item.is_egg ? 'Egg' : 'Non-Veg')}
-                              >
+                      <>
+                        {filteredBillableItems.map((item, idx) => {
+                          const isHighlighted = idx === highlightedIndex;
+                          return (
+                            <div
+                              key={item.productId}
+                              onMouseEnter={() => setHighlightedIndex(idx)}
+                              onClick={() => {
+                                setSelectedProductId(item.productId);
+                                addItemToCart({ productId: item.productId, name: item.name, unitPrice: item.unitPrice }, inputQuantity);
+                                setSearchItemText('');
+                                setIsSearchOpen(false);
+                              }}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '10px 14px',
+                                cursor: 'pointer',
+                                backgroundColor: isHighlighted ? '#F1F5F9' : '#FFFFFF',
+                                borderBottom: '1px solid #F1F5F9',
+                                transition: 'background-color 0.15s'
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                {/* Veg / Non-Veg Badge */}
                                 <span
                                   style={{
-                                    width: '7px',
-                                    height: '7px',
-                                    borderRadius: '50%',
-                                    backgroundColor: item.is_veg ? '#16A34A' : (item.is_egg ? '#EAB308' : '#DC2626')
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    width: '16px',
+                                    height: '16px',
+                                    border: `1.5px solid ${item.is_veg ? '#16A34A' : (item.is_egg ? '#EAB308' : '#DC2626')}`,
+                                    borderRadius: '3px',
+                                    padding: '1px'
                                   }}
-                                />
-                              </span>
-
-                              {/* Item Name & Portion Badge */}
-                              <div>
-                                <span style={{ fontWeight: 600, color: '#0F172A', fontSize: '14px' }}>
-                                  {item.name}
-                                </span>
-                                {item.portionLabel && (
+                                  title={item.is_veg ? 'Pure Veg' : (item.is_egg ? 'Egg' : 'Non-Veg')}
+                                >
                                   <span
                                     style={{
-                                      marginLeft: '8px',
-                                      padding: '2px 7px',
-                                      borderRadius: '999px',
-                                      backgroundColor: '#EFF6FF',
-                                      color: '#2563EB',
-                                      fontSize: '11px',
-                                      fontWeight: 700
+                                      width: '7px',
+                                      height: '7px',
+                                      borderRadius: '50%',
+                                      backgroundColor: item.is_veg ? '#16A34A' : (item.is_egg ? '#EAB308' : '#DC2626')
                                     }}
-                                  >
-                                    {item.portionLabel}
+                                  />
+                                </span>
+
+                                {/* Item Name & Portion Badge */}
+                                <div>
+                                  <span style={{ fontWeight: 600, color: '#0F172A', fontSize: '14px' }}>
+                                    {item.name}
                                   </span>
-                                )}
+                                  {item.portionLabel && (
+                                    <span
+                                      style={{
+                                        marginLeft: '8px',
+                                        padding: '2px 7px',
+                                        borderRadius: '999px',
+                                        backgroundColor: '#EFF6FF',
+                                        color: '#2563EB',
+                                        fontSize: '11px',
+                                        fontWeight: 700
+                                      }}
+                                    >
+                                      {item.portionLabel}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Price and Action */}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <span style={{ fontWeight: 700, color: '#0F172A', fontSize: '14px' }}>
+                                  ₹{item.unitPrice.toFixed(2)}
+                                </span>
+                                <button
+                                  type="button"
+                                  style={{
+                                    padding: '4px 10px',
+                                    borderRadius: '6px',
+                                    border: '1px solid #CBD5E1',
+                                    backgroundColor: isHighlighted ? 'var(--cw-color-primary, #C85A17)' : '#FFFFFF',
+                                    color: isHighlighted ? '#FFFFFF' : '#334155',
+                                    fontSize: '12px',
+                                    fontWeight: 600,
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  + Add
+                                </button>
                               </div>
                             </div>
+                          );
+                        })}
 
-                            {/* Price and Action */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                              <span style={{ fontWeight: 700, color: '#0F172A', fontSize: '14px' }}>
-                                ₹{item.unitPrice.toFixed(2)}
-                              </span>
-                              <button
-                                type="button"
-                                style={{
-                                  padding: '4px 10px',
-                                  borderRadius: '6px',
-                                  border: '1px solid #CBD5E1',
-                                  backgroundColor: isHighlighted ? 'var(--cw-color-primary, #C85A17)' : '#FFFFFF',
-                                  color: isHighlighted ? '#FFFFFF' : '#334155',
-                                  fontSize: '12px',
-                                  fontWeight: 600,
-                                  cursor: 'pointer'
-                                }}
-                              >
-                                + Add
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })
+                        {/* Dropdown Bottom Prompt for Custom Items */}
+                        <div
+                          onClick={() => {
+                            handleOpenCustomItem(searchItemText.trim(), '');
+                            setIsSearchOpen(false);
+                          }}
+                          style={{
+                            padding: '10px 14px',
+                            backgroundColor: '#F8FAFC',
+                            borderTop: '1px solid #E2E8F0',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            color: '#2563EB',
+                            fontSize: '12px',
+                            fontWeight: 700
+                          }}
+                        >
+                          <span>✨ Counter item not in online menu (Cigarette, Cold Drink, etc.)?</span>
+                          <span style={{ textDecoration: 'underline' }}>+ Add Custom Rate (₹)</span>
+                        </div>
+                      </>
                     )}
                   </div>
                 )}
 
-                {/* Fast-Tap Counter Quick Chips */}
+                {/* Fast-Tap Food Quick Chips */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '10px' }}>
                   <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>Quick Add:</span>
                   {[
@@ -1202,6 +1664,109 @@ export default function BillbookPosPage() {
                       </button>
                     );
                   })}
+                </div>
+
+                {/* Counter-Only Offline Quick Items (Cigarette, Cold Drinks, Water, Custom) */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
+                  <span style={{ fontSize: '11px', color: '#9F1239', fontWeight: 700, backgroundColor: '#FFE4E6', padding: '2px 8px', borderRadius: '4px' }}>
+                    Counter / Offline Only:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenCustomItem('Cigarette', '18')}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '16px',
+                      border: '1px solid #FECDD3',
+                      backgroundColor: '#FFF1F2',
+                      color: '#9F1239',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    🚬 Cigarette (₹18)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenCustomItem('Cigarette Packet', '180')}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '16px',
+                      border: '1px solid #FECDD3',
+                      backgroundColor: '#FFF1F2',
+                      color: '#9F1239',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    🚬 Cigarette Pack (₹180)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenCustomItem('Cold Drink', '40')}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '16px',
+                      border: '1px solid #BBF7D0',
+                      backgroundColor: '#F0FDF4',
+                      color: '#166534',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    🥤 Cold Drink (₹40)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenCustomItem('Mineral Water', '20')}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '16px',
+                      border: '1px solid #BFDBFE',
+                      backgroundColor: '#EFF6FF',
+                      color: '#1E40AF',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    💧 Water Bottle (₹20)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenCustomItem('Sting / Energy Drink', '50')}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '16px',
+                      border: '1px solid #FDE68A',
+                      backgroundColor: '#FEF3C7',
+                      color: '#92400E',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    ⚡ Sting / Red Bull (₹50)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenCustomItem('', '')}
+                    style={{
+                      padding: '4px 12px',
+                      borderRadius: '16px',
+                      border: '1.5px dashed #2563EB',
+                      backgroundColor: '#EFF6FF',
+                      color: '#1D4ED8',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    ✨ + Custom / Other Item
+                  </button>
                 </div>
               </div>
 
@@ -1320,18 +1885,83 @@ export default function BillbookPosPage() {
                 />
               </div>
 
+              {/* Customer Details for Walk-in / Cash / UPI (Optional, prints on bill) */}
+              {customerType !== 'Credit' && customerType !== 'Corporate Bill' && paymentMode !== 'CREDIT' && (
+                <div style={{ marginBottom: '16px', padding: '10px 12px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <label style={{ fontSize: '11.5px', fontWeight: 700, color: '#334155' }}>
+                      👤 Customer Details <span style={{ fontSize: '10.5px', fontWeight: 500, color: '#64748B' }}>(Optional)</span>
+                    </label>
+                    {(walkinCustomerName || walkinCustomerPhone) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setWalkinCustomerName('');
+                          setWalkinCustomerPhone('');
+                        }}
+                        style={{ fontSize: '10px', color: '#DC2626', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, color: '#64748B', marginBottom: '2px' }}>Customer Name</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Ramesh"
+                        value={walkinCustomerName}
+                        onChange={(e) => setWalkinCustomerName(e.target.value)}
+                        style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '12px' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, color: '#64748B', marginBottom: '2px' }}>Mobile / Phone</label>
+                      <input
+                        type="tel"
+                        maxLength={10}
+                        placeholder="10-digit number"
+                        value={walkinCustomerPhone}
+                        onChange={(e) => setWalkinCustomerPhone(e.target.value.replace(/\D/g, ''))}
+                        style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '12px' }}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '9.5px', color: '#64748B', marginTop: '4px' }}>
+                    💡 Details will be printed on the thermal receipt and saved in invoice history.
+                  </div>
+                </div>
+              )}
+
               {/* Payment Mode Selector */}
               <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Payment Mode</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#475569' }}>Payment Mode</label>
+                  {paymentMode === 'UPI' && (
+                    <button
+                      type="button"
+                      onClick={() => setShowUpiModal(true)}
+                      style={{ fontSize: '11px', color: '#1D4ED8', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700, textDecoration: 'underline' }}
+                    >
+                      📱 Show QR Code
+                    </button>
+                  )}
+                </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
                   {[
-                    { id: 'CASH', label: 'Cash / COD' },
-                    { id: 'UPI', label: 'UPI QR' },
-                    { id: 'CREDIT', label: 'Credit' }
+                    { id: 'CASH', label: '💵 Cash' },
+                    { id: 'UPI', label: '📱 UPI QR' },
+                    { id: 'CREDIT', label: '📖 Credit' }
                   ].map((m) => (
                     <button
                       key={m.id}
-                      onClick={() => setPaymentMode(m.id as any)}
+                      onClick={() => {
+                        setPaymentMode(m.id as any);
+                        if (m.id === 'UPI') {
+                          setShowUpiModal(true);
+                        }
+                      }}
                       style={{
                         padding: '8px 4px',
                         fontSize: '11px',
@@ -1339,7 +1969,7 @@ export default function BillbookPosPage() {
                         borderRadius: '6px',
                         border: 'none',
                         cursor: 'pointer',
-                        backgroundColor: paymentMode === m.id ? '#166534' : '#F1F5F9',
+                        backgroundColor: paymentMode === m.id ? (m.id === 'CREDIT' ? '#DC2626' : '#166534') : '#F1F5F9',
                         color: paymentMode === m.id ? '#FFFFFF' : '#475569'
                       }}
                     >
@@ -1349,21 +1979,44 @@ export default function BillbookPosPage() {
                 </div>
               </div>
 
-              {/* UPI UTR input if mode is UPI */}
+              {/* UPI UTR input & QR launcher if mode is UPI */}
               {paymentMode === 'UPI' && (
-                <div style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
-                    UPI Reference / UTR Number
+                <div style={{ marginBottom: '16px', padding: '10px 12px', backgroundColor: '#EFF6FF', borderRadius: '8px', border: '1px solid #BFDBFE' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowUpiModal(true)}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      backgroundColor: '#2563EB',
+                      color: '#FFFFFF',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      marginBottom: '8px',
+                      boxShadow: '0 2px 6px rgba(37, 99, 235, 0.3)'
+                    }}
+                  >
+                    📱 Scan Chaiwale UPI QR (₹{currentGrandTotal})
+                  </button>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#1E3A8A', marginBottom: '4px' }}>
+                    UPI Reference / UTR Number (Optional)
                   </label>
                   <input
                     type="text"
                     placeholder="Enter 12-digit UPI UTR..."
                     value={transactionRef}
                     onChange={(e) => setTransactionRef(e.target.value)}
-                    style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '12px' }}
+                    style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '12px' }}
                   />
-                  <div style={{ fontSize: '10px', color: '#64748B', marginTop: '2px' }}>
-                    Chaiwale Official UPI: <strong>chaiwale@ptyes</strong>
+                  <div style={{ fontSize: '10px', color: '#1E40AF', marginTop: '4px', fontWeight: 600 }}>
+                    Official UPI ID: <strong>chaiwale@ptyes</strong>
                   </div>
                 </div>
               )}
@@ -1744,6 +2397,401 @@ export default function BillbookPosPage() {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom / Offline Counter Item Modal (Cigarette, Cold Drinks, Miscellaneous) */}
+      {showCustomItemModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(3px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99999,
+            padding: '16px'
+          }}
+          onClick={() => setShowCustomItemModal(false)}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              maxWidth: '440px',
+              width: '100%',
+              padding: '24px',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+              position: 'relative'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '20px' }}>✨</span>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#0F172A' }}>
+                  Counter / Custom Item
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCustomItemModal(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '22px',
+                  color: '#94A3B8',
+                  cursor: 'pointer',
+                  padding: '4px'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <p style={{ margin: '0 0 16px', fontSize: '12px', color: '#64748B', lineHeight: '1.4' }}>
+              ⚡ <strong>Offline Only:</strong> Ye item public website/menu me nahi aayega. Rate and name aapke according POS bill & Khata me save hoga.
+            </p>
+
+            <form onSubmit={handleAddCustomItemToCart} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '5px' }}>
+                  Item Name:
+                </label>
+                <input
+                  type="text"
+                  value={customItemName}
+                  onChange={(e) => setCustomItemName(e.target.value)}
+                  placeholder="e.g. Cigarette, Cold Drink, Lighter, Chips"
+                  autoFocus
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: '1.5px solid #CBD5E1',
+                    fontSize: '14px',
+                    color: '#0F172A',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '5px' }}>
+                  Rate / Price per unit (₹):
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={customItemPrice}
+                  onChange={(e) => setCustomItemPrice(e.target.value)}
+                  placeholder="Rate ₹"
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: '1.5px solid #CBD5E1',
+                    fontSize: '15px',
+                    fontWeight: 700,
+                    color: '#0F172A',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+                {/* Fast tap rate presets */}
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
+                  {['10', '18', '20', '35', '40', '50', '60', '100', '180'].map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setCustomItemPrice(p)}
+                      style={{
+                        padding: '3px 8px',
+                        borderRadius: '4px',
+                        border: customItemPrice === p ? '1.5px solid #2563EB' : '1px solid #E2E8F0',
+                        backgroundColor: customItemPrice === p ? '#EFF6FF' : '#F8FAFC',
+                        color: customItemPrice === p ? '#1D4ED8' : '#475569',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ₹{p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '5px' }}>
+                    Quantity:
+                  </label>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', border: '1.5px solid #CBD5E1', borderRadius: '8px', overflow: 'hidden' }}>
+                    <button
+                      type="button"
+                      onClick={() => setCustomItemQuantity(Math.max(1, customItemQuantity - 1))}
+                      style={{
+                        padding: '6px 12px',
+                        border: 'none',
+                        background: '#F1F5F9',
+                        fontSize: '15px',
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      -
+                    </button>
+                    <input
+                      type="number"
+                      min="1"
+                      value={customItemQuantity}
+                      onChange={(e) => setCustomItemQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                      style={{
+                        width: '45px',
+                        textAlign: 'center',
+                        border: 'none',
+                        outline: 'none',
+                        fontSize: '14px',
+                        fontWeight: 700
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setCustomItemQuantity(customItemQuantity + 1)}
+                      style={{
+                        padding: '6px 12px',
+                        border: 'none',
+                        background: '#F1F5F9',
+                        fontSize: '15px',
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ textAlign: 'right', marginTop: '12px' }}>
+                  <div style={{ fontSize: '11px', color: '#64748B' }}>Line Total</div>
+                  <div style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A' }}>
+                    ₹{((Number(customItemPrice) || 0) * (Number(customItemQuantity) || 1)).toFixed(2)}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowCustomItemModal(false)}
+                  style={{
+                    flex: 1,
+                    padding: '11px',
+                    borderRadius: '8px',
+                    border: '1px solid #CBD5E1',
+                    backgroundColor: '#FFFFFF',
+                    color: '#475569',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{
+                    flex: 2,
+                    padding: '11px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    backgroundColor: '#0F172A',
+                    color: '#FFFFFF',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <span>+ Add to Bill</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Real Chaiwale UPI QR Modal */}
+      {showUpiModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 999999,
+            backgroundColor: 'rgba(15, 23, 42, 0.75)',
+            backdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px'
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowUpiModal(false);
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              maxWidth: '380px',
+              width: '100%',
+              padding: '24px 20px',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+              textAlign: 'center',
+              position: 'relative'
+            }}
+          >
+            <button
+              onClick={() => setShowUpiModal(false)}
+              style={{
+                position: 'absolute',
+                top: '14px',
+                right: '14px',
+                background: '#F1F5F9',
+                border: 'none',
+                borderRadius: '50%',
+                width: '32px',
+                height: '32px',
+                cursor: 'pointer',
+                fontWeight: 700,
+                color: '#475569',
+                fontSize: '14px'
+              }}
+            >
+              ✕
+            </button>
+
+            <div style={{ display: 'inline-flex', padding: '4px 12px', borderRadius: '20px', backgroundColor: '#FEF3C7', color: '#92400E', fontSize: '11px', fontWeight: 800, marginBottom: '8px' }}>
+              ⚡ INSTANT SCAN & PAY
+            </div>
+
+            <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: '0 0 2px 0' }}>
+              Chaiwale Official UPI QR
+            </h3>
+            <p style={{ fontSize: '12px', color: '#64748B', margin: '0 0 14px 0' }}>
+              Rohitash Khurana • Shubham Sharma
+            </p>
+
+            {/* QR Code Container */}
+            <div
+              style={{
+                width: '210px',
+                height: '210px',
+                margin: '0 auto 14px',
+                padding: '10px',
+                backgroundColor: '#FFFFFF',
+                borderRadius: '14px',
+                border: '2px solid #E2E8F0',
+                boxShadow: '0 4px 14px rgba(0,0,0,0.08)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <img
+                src="/assets/chaiwale-upi-qr.jpeg"
+                alt="Chaiwale Verified UPI QR Code"
+                style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '8px' }}
+              />
+            </div>
+
+            {/* Bill Amount Pill */}
+            <div
+              style={{
+                backgroundColor: '#F8FAFC',
+                borderRadius: '10px',
+                padding: '10px 14px',
+                marginBottom: '12px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                border: '1px solid #E2E8F0'
+              }}
+            >
+              <span style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>Total Bill Amount:</span>
+              <span style={{ fontSize: '18px', fontWeight: 900, color: '#16A34A' }}>₹{currentGrandTotal}</span>
+            </div>
+
+            {/* UPI ID with copy button */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                backgroundColor: '#EFF6FF',
+                border: '1px dashed #3B82F6',
+                borderRadius: '10px',
+                padding: '8px 12px',
+                marginBottom: '14px'
+              }}
+            >
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontSize: '9.5px', color: '#64748B', fontWeight: 600 }}>VERIFIED UPI ID:</div>
+                <div style={{ fontSize: '13px', fontWeight: 800, color: '#1D4ED8', fontFamily: 'monospace' }}>chaiwale@ptyes</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText('chaiwale@ptyes');
+                  showAlert('Copied', 'UPI ID "chaiwale@ptyes" copied to clipboard!', 'success');
+                }}
+                style={{
+                  padding: '5px 10px',
+                  backgroundColor: '#2563EB',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                📋 Copy
+              </button>
+            </div>
+
+            <div style={{ fontSize: '11px', color: '#64748B', marginBottom: '14px' }}>
+              Accepts Google Pay, PhonePe, Paytm, BHIM, Cred & all banking apps.
+            </div>
+
+            <button
+              onClick={() => {
+                setPaymentMode('UPI');
+                setShowUpiModal(false);
+              }}
+              style={{
+                width: '100%',
+                padding: '11px',
+                backgroundColor: '#16A34A',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '13px',
+                fontWeight: 800,
+                cursor: 'pointer'
+              }}
+            >
+              ✓ Payment Verified / Close QR
+            </button>
           </div>
         </div>
       )}

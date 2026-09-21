@@ -9,6 +9,8 @@ import {
   addKhataPayment,
   fetchKhataStatement,
   deleteKhataOffice,
+  getKhataExcelExportUrl,
+  getKhataStatementPdfUrl,
   KhataOfficeDto,
   KhataStatementDto
 } from '../services/billbook-api.client';
@@ -23,6 +25,11 @@ export const BillbookKhataView: React.FC = () => {
   const [statementLoading, setStatementLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [notification, setNotification] = useState<string | null>(null);
+
+  // Date Range Filter States (For Date-wise Excel & PDF Reports)
+  const [filterStartDate, setFilterStartDate] = useState<string>('');
+  const [filterEndDate, setFilterEndDate] = useState<string>('');
+  const [activeDatePreset, setActiveDatePreset] = useState<'all' | 'today' | 'yesterday' | 'this_month' | 'custom'>('all');
 
   // 3D Thermal Receipt Modal State for Khata
   const [thermalReceiptModalOpen, setThermalReceiptModalOpen] = useState(false);
@@ -49,17 +56,19 @@ export const BillbookKhataView: React.FC = () => {
   const [paymentMode, setPaymentMode] = useState<string>('UPI');
   const [paymentNotes, setPaymentNotes] = useState('');
 
-  // Quick Preset Items for Canteen & Fast Food
+  // Quick Preset Items for Canteen, Tobacco & Offline Drinks (Editable rate)
   const QUICK_ITEMS = [
     { name: 'Kulhad Chai', price: 15 },
     { name: 'Bun Maska', price: 25 },
     { name: 'Samosa', price: 15 },
     { name: 'Poha', price: 30 },
-    { name: 'Aalu Paratha', price: 30 },
-    { name: 'Chhole Chawal', price: 70 },
-    { name: 'Veg Thali', price: 99 },
-    { name: 'Bread Pakoda', price: 15 },
-    { name: 'Cold Coffee', price: 60 }
+    { name: 'Cold Coffee', price: 60 },
+    { name: '🥤 Cold Drink', price: 40 },
+    { name: '💧 Mineral Water', price: 20 },
+    { name: '🚬 Cigarette', price: 18 },
+    { name: '🚬 Cigarette Pack', price: 180 },
+    { name: '⚡ Sting / Red Bull', price: 50 },
+    { name: '✨ Custom Item', price: 0 }
   ];
 
   const loadOffices = async () => {
@@ -77,10 +86,35 @@ export const BillbookKhataView: React.FC = () => {
     }
   };
 
-  const loadStatement = async (officeId: string) => {
+  const handleApplyDatePreset = (preset: 'all' | 'today' | 'yesterday' | 'this_month' | 'custom') => {
+    setActiveDatePreset(preset);
+    const today = new Date();
+    const toYmd = (d: Date) => d.toISOString().split('T')[0];
+
+    if (preset === 'all') {
+      setFilterStartDate('');
+      setFilterEndDate('');
+    } else if (preset === 'today') {
+      const todayStr = toYmd(today);
+      setFilterStartDate(todayStr);
+      setFilterEndDate(todayStr);
+    } else if (preset === 'yesterday') {
+      const yest = new Date(today);
+      yest.setDate(yest.getDate() - 1);
+      const yestStr = toYmd(yest);
+      setFilterStartDate(yestStr);
+      setFilterEndDate(yestStr);
+    } else if (preset === 'this_month') {
+      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+      setFilterStartDate(toYmd(firstDay));
+      setFilterEndDate(toYmd(today));
+    }
+  };
+
+  const loadStatement = async (officeId: string, start = filterStartDate, end = filterEndDate) => {
     setStatementLoading(true);
     try {
-      const stmt = await fetchKhataStatement(officeId);
+      const stmt = await fetchKhataStatement(officeId, start || undefined, end || undefined);
       setStatement(stmt);
     } catch (err: any) {
       console.error('Failed to load statement:', err);
@@ -95,11 +129,11 @@ export const BillbookKhataView: React.FC = () => {
 
   useEffect(() => {
     if (selectedOfficeId) {
-      loadStatement(selectedOfficeId);
+      loadStatement(selectedOfficeId, filterStartDate, filterEndDate);
     } else {
       setStatement(null);
     }
-  }, [selectedOfficeId]);
+  }, [selectedOfficeId, filterStartDate, filterEndDate]);
 
   // Custom Popups / Dialogs State
   const [dialogConfig, setDialogConfig] = useState<ChaiwaleDialogConfig | null>(null);
@@ -209,6 +243,20 @@ export const BillbookKhataView: React.FC = () => {
       whatsAppUrl: waUrl
     });
     setThermalReceiptModalOpen(true);
+  };
+
+  const handleSelectQuickItem = (qi: { name: string; price: number }) => {
+    if (qi.name.includes('Custom Item')) {
+      setEntryItemName('');
+      setEntryPrice(0);
+      return;
+    }
+    // Remove leading emoji icon for clean database logging
+    const cleanName = qi.name.replace(/^[^\w\s]+\s*/, '');
+    setEntryItemName(cleanName);
+    if (qi.price > 0) {
+      setEntryPrice(qi.price);
+    }
   };
 
   const handleAddEntry = async (e: React.FormEvent) => {
@@ -354,20 +402,19 @@ export const BillbookKhataView: React.FC = () => {
     }
   };
 
-  const handleSelectQuickItem = (item: { name: string; price: number }) => {
-    setEntryItemName(item.name);
-    setEntryPrice(item.price);
-  };
-
   const triggerWhatsApp = () => {
     if (!statement || !statement.office.phone) {
       showAlert('Mobile Missing', 'Customer mobile number is not registered for WhatsApp.', 'warning');
       return;
     }
     const cleanPhone = statement.office.phone.replace(/\D/g, '');
-
     const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
-    const url = `https://wa.me/${fullPhone}?text=${encodeURIComponent(statement.whatsappText)}`;
+
+    const pin = statement.office.client_pin || '----';
+    let text = statement.whatsappText;
+    text += `\n📄 *Official Itemized Statement & Verification:*\nhttps://chaiwale.co.in/check-bill (Enter PIN: ${pin})\n`;
+
+    const url = `https://wa.me/${fullPhone}?text=${encodeURIComponent(text)}`;
     window.open(url, '_blank');
   };
 
@@ -493,6 +540,120 @@ export const BillbookKhataView: React.FC = () => {
             }}
           >
             + Add New Office / Client
+          </button>
+        </div>
+      </div>
+
+      {/* Date Filter & Excel Export Toolbar */}
+      <div
+        style={{
+          background: '#F8FAFC',
+          borderBottom: '1px solid #E2E8F0',
+          padding: '10px 24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '12px', fontWeight: 700, color: '#475569', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            📅 Date Range:
+          </span>
+          <div style={{ display: 'inline-flex', gap: '4px', background: '#E2E8F0', padding: '3px', borderRadius: '8px' }}>
+            {[
+              { id: 'all', label: 'All Time' },
+              { id: 'today', label: 'Today' },
+              { id: 'yesterday', label: 'Yesterday' },
+              { id: 'this_month', label: 'This Month' }
+            ].map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => handleApplyDatePreset(p.id as any)}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  fontSize: '11.5px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  backgroundColor: activeDatePreset === p.id ? '#FFFFFF' : 'transparent',
+                  color: activeDatePreset === p.id ? '#1E293B' : '#64748B',
+                  boxShadow: activeDatePreset === p.id ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                }}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Custom Date Pickers */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '6px' }}>
+            <span style={{ fontSize: '11px', color: '#64748B' }}>From:</span>
+            <input
+              type="date"
+              value={filterStartDate}
+              onChange={(e) => {
+                setFilterStartDate(e.target.value);
+                setActiveDatePreset('custom');
+              }}
+              style={{
+                padding: '4px 8px',
+                borderRadius: '6px',
+                border: '1px solid #CBD5E1',
+                fontSize: '12px',
+                backgroundColor: '#FFFFFF'
+              }}
+            />
+            <span style={{ fontSize: '11px', color: '#64748B' }}>To:</span>
+            <input
+              type="date"
+              value={filterEndDate}
+              onChange={(e) => {
+                setFilterEndDate(e.target.value);
+                setActiveDatePreset('custom');
+              }}
+              style={{
+                padding: '4px 8px',
+                borderRadius: '6px',
+                border: '1px solid #CBD5E1',
+                fontSize: '12px',
+                backgroundColor: '#FFFFFF'
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Global Export Excel Button */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button
+            type="button"
+            onClick={() => {
+              const url = getKhataExcelExportUrl({
+                startDate: filterStartDate || undefined,
+                endDate: filterEndDate || undefined
+              });
+              window.open(url, '_blank');
+            }}
+            style={{
+              padding: '7px 14px',
+              borderRadius: '8px',
+              border: '1px solid #16A34A',
+              backgroundColor: '#F0FDF4',
+              color: '#15803D',
+              fontSize: '12px',
+              fontWeight: 800,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: '0 1px 3px rgba(22, 163, 74, 0.15)'
+            }}
+            title="Download 4-sheet date-wise Excel workbook covering all active Khata customers"
+          >
+            <span>📊 Export Khata Excel (.xlsx)</span>
           </button>
         </div>
       </div>
@@ -656,6 +817,68 @@ export const BillbookKhataView: React.FC = () => {
 
                 {/* Direct Action Buttons */}
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  {/* Download Official Date-wise PDF Bill */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!selectedOffice) return;
+                      const url = getKhataStatementPdfUrl(selectedOffice.id, {
+                        startDate: filterStartDate || undefined,
+                        endDate: filterEndDate || undefined,
+                        pin: selectedOffice.client_pin
+                      });
+                      window.open(url, '_blank');
+                    }}
+                    style={{
+                      backgroundColor: '#0F172A',
+                      border: 'none',
+                      color: '#FFFFFF',
+                      padding: '10px 16px',
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      boxShadow: '0 4px 12px rgba(15, 23, 42, 0.25)',
+                      transition: 'all 0.15s ease'
+                    }}
+                    title="Generate and download official PDF bill for customer with itemized date-wise breakdown"
+                  >
+                    📄 Download PDF Bill
+                  </button>
+
+                  {/* Customer Excel Export */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!selectedOffice) return;
+                      const url = getKhataExcelExportUrl({
+                        office_id: selectedOffice.id,
+                        startDate: filterStartDate || undefined,
+                        endDate: filterEndDate || undefined
+                      });
+                      window.open(url, '_blank');
+                    }}
+                    style={{
+                      backgroundColor: '#EFF6FF',
+                      border: '1px solid #BFDBFE',
+                      color: '#1D4ED8',
+                      padding: '10px 14px',
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                    title="Export this customer's date-wise entries to Excel"
+                  >
+                    📊 Excel
+                  </button>
+
                   <button
                     onClick={() => selectedOffice && handleGenerateKhataBillSlip(selectedOffice, statement)}
                     style={{
@@ -759,26 +982,60 @@ export const BillbookKhataView: React.FC = () => {
                   </div>
 
                   {/* Quick Item Chips */}
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '14px' }}>
-                    {QUICK_ITEMS.map((qi) => (
-                      <button
-                        key={qi.name}
-                        type="button"
-                        onClick={() => handleSelectQuickItem(qi)}
-                        style={{
-                          background: entryItemName === qi.name ? '#FEE2E2' : '#F9FAFB',
-                          border: entryItemName === qi.name ? '1px solid #EF4444' : '1px solid #E5E7EB',
-                          color: entryItemName === qi.name ? '#B91C1C' : '#374151',
-                          padding: '4px 10px',
-                          borderRadius: '6px',
-                          fontSize: '11px',
-                          fontWeight: 700,
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {qi.name} (₹{qi.price})
-                      </button>
-                    ))}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '14px' }}>
+                    <div style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600 }}>
+                      ⚡ Fast-Tap Presets (Tap any item, rate can be adjusted below):
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {QUICK_ITEMS.map((qi) => {
+                        const isCustom = qi.name.includes('Custom');
+                        const isTobacco = qi.name.includes('Cigarette');
+                        const isDrink = qi.name.includes('Cold Drink') || qi.name.includes('Water') || qi.name.includes('Red Bull');
+                        const isSelected = entryItemName === qi.name.replace(/^[^\w\s]+\s*/, '');
+
+                        let bg = isSelected ? '#FEE2E2' : '#F9FAFB';
+                        let border = isSelected ? '1.5px solid #EF4444' : '1px solid #E5E7EB';
+                        let color = isSelected ? '#B91C1C' : '#374151';
+
+                        if (isTobacco && !isSelected) {
+                          bg = '#FFF1F2';
+                          border = '1px solid #FECDD3';
+                          color = '#9F1239';
+                        } else if (isDrink && !isSelected) {
+                          bg = '#F0FDF4';
+                          border = '1px solid #BBF7D0';
+                          color = '#166534';
+                        } else if (isCustom && !isSelected) {
+                          bg = '#EFF6FF';
+                          border = '1.5px dashed #3B82F6';
+                          color = '#1D4ED8';
+                        }
+
+                        return (
+                          <button
+                            key={qi.name}
+                            type="button"
+                            onClick={() => handleSelectQuickItem(qi)}
+                            style={{
+                              background: bg,
+                              border,
+                              color,
+                              padding: '5px 11px',
+                              borderRadius: '6px',
+                              fontSize: '11.5px',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                          >
+                            <span>{qi.name}</span>
+                            {qi.price > 0 && <span style={{ opacity: 0.85 }}>(₹{qi.price})</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   <form onSubmit={handleAddEntry} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
