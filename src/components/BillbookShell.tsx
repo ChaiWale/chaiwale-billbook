@@ -331,7 +331,7 @@ export default function BillbookShell({ children }: BillbookShellProps) {
         </div>
       </header>
 
-      <main className="billbook-main-container" style={{ padding: '20px', maxWidth: '1440px', margin: '0 auto', width: '100%' }}>
+      <main className="billbook-main-container" style={{ padding: '20px', maxWidth: '1440px', margin: '0 auto', width: '100%', overflowX: 'hidden' }}>
         {children}
       </main>
 

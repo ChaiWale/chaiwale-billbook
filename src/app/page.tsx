@@ -877,7 +877,7 @@ export default function BillbookPosPage() {
   const currentGrandTotal = calculation ? calculation.roundedTotal : Math.round(currentSubtotal - currentDiscount);
 
   return (
-    <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
+    <div style={{ maxWidth: '1400px', margin: '0 auto', width: '100%', overflowX: 'hidden' }}>
       {/* Top Navigation Tabs */}
       <div
         className="billbook-top-tabs"
@@ -1499,7 +1499,7 @@ export default function BillbookPosPage() {
                     )}
                   </div>
 
-                  <div className="billbook-stepper-add-group" style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', width: '100%' }}>
+                  <div className="billbook-stepper-add-group" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                     {/* Quantity Stepper */}
                     <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #CBD5E1', borderRadius: '8px', overflow: 'hidden', height: '42px', backgroundColor: '#F8FAFC' }}>
                       <button
@@ -1528,6 +1528,7 @@ export default function BillbookPosPage() {
                     {/* Add Button */}
                     <button
                       type="button"
+                      className="billbook-add-btn"
                       onClick={() => {
                         if (filteredBillableItems.length > 0) {
                           const sel = highlightedIndex >= 0 && highlightedIndex < filteredBillableItems.length
@@ -1560,6 +1561,7 @@ export default function BillbookPosPage() {
                     {/* Custom / Offline Item Button */}
                     <button
                       type="button"
+                      className="billbook-custom-btn"
                       onClick={() => handleOpenCustomItem(searchItemText.trim(), '')}
                       style={{
                         padding: '11px 18px',
@@ -2942,23 +2944,34 @@ export default function BillbookPosPage() {
           }
         }
         @media (max-width: 640px) {
-          /* Tabs: already grid 4-col, shrink font further if needed */
           .billbook-tab-btn {
             font-size: 11px !important;
             padding: 8px 2px !important;
           }
-          /* Search row stacks vertically */
+          /* Search box takes full row, stepper row wraps below it */
           .billbook-search-row {
             flex-direction: column !important;
             align-items: stretch !important;
             gap: 8px !important;
           }
-          /* Stepper + Add + Custom: stepper left, buttons fill remaining */
+          /* Stepper group: stepper fixed width, two buttons share rest */
           .billbook-stepper-add-group {
-            display: grid !important;
-            grid-template-columns: auto 1fr 1fr !important;
             width: 100% !important;
-            gap: 6px !important;
+            flex-wrap: nowrap !important;
+          }
+          .billbook-add-btn {
+            flex: 1 !important;
+            min-width: 0 !important;
+            justify-content: center !important;
+            font-size: 13px !important;
+            padding: 11px 8px !important;
+          }
+          .billbook-custom-btn {
+            flex: 1 !important;
+            min-width: 0 !important;
+            justify-content: center !important;
+            font-size: 12px !important;
+            padding: 11px 8px !important;
           }
         }
       `}</style>
