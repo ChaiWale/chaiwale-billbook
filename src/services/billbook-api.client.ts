@@ -107,6 +107,10 @@ export interface InvoiceRecordDto {
       quantity: number;
       line_total: number;
     }>;
+    customers?: {
+      name: string;
+      phone: string;
+    } | null;
   } | null;
 }
 
