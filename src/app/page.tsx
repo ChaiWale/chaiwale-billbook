@@ -882,85 +882,85 @@ export default function BillbookPosPage() {
       <div
         className="billbook-top-tabs"
         style={{
-          display: 'flex',
-          gap: '12px',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: '6px',
           marginBottom: '20px',
           borderBottom: '2px solid #E2E8F0',
           paddingBottom: '8px',
-          overflowX: 'auto',
-          WebkitOverflowScrolling: 'touch',
-          maxWidth: '100%',
-          scrollbarWidth: 'none'
+          width: '100%'
         }}
       >
         <button
           onClick={() => setActiveTab('POS')}
+          className="billbook-tab-btn"
           style={{
-            padding: '10px 20px',
+            padding: '9px 6px',
             borderRadius: '8px',
             fontWeight: 800,
-            fontSize: '14px',
+            fontSize: '12px',
             border: 'none',
             cursor: 'pointer',
-            backgroundColor: activeTab === 'POS' ? 'var(--cw-color-primary)' : 'transparent',
+            textAlign: 'center',
+            backgroundColor: activeTab === 'POS' ? 'var(--cw-color-primary)' : '#F1F5F9',
             color: activeTab === 'POS' ? '#FFFFFF' : '#64748B'
           }}
         >
-          🧾 New Bill (POS Counter)
+          🧾 New Bill
         </button>
         <button
           onClick={() => {
             setActiveTab('BILLS');
             loadInvoices();
           }}
+          className="billbook-tab-btn"
           style={{
-            padding: '10px 20px',
+            padding: '9px 6px',
             borderRadius: '8px',
             fontWeight: 800,
-            fontSize: '14px',
+            fontSize: '12px',
             border: 'none',
             cursor: 'pointer',
-            backgroundColor: activeTab === 'BILLS' ? 'var(--cw-color-primary)' : 'transparent',
-            color: activeTab === 'BILLS' ? '#FFFFFF' : '#64748B',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
+            textAlign: 'center',
+            backgroundColor: activeTab === 'BILLS' ? 'var(--cw-color-primary)' : '#F1F5F9',
+            color: activeTab === 'BILLS' ? '#FFFFFF' : '#64748B'
           }}
         >
-          📋 Bills History ({invoicesList.length})
+          📋 Bills ({invoicesList.length})
         </button>
         <button
           onClick={() => setActiveTab('KHATABOOK')}
+          className="billbook-tab-btn"
           style={{
-            padding: '10px 20px',
+            padding: '9px 6px',
             borderRadius: '8px',
             fontWeight: 800,
-            fontSize: '14px',
+            fontSize: '12px',
             border: 'none',
             cursor: 'pointer',
-            backgroundColor: activeTab === 'KHATABOOK' ? '#DC2626' : 'transparent',
-            color: activeTab === 'KHATABOOK' ? '#FFFFFF' : '#64748B',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
+            textAlign: 'center',
+            backgroundColor: activeTab === 'KHATABOOK' ? '#DC2626' : '#F1F5F9',
+            color: activeTab === 'KHATABOOK' ? '#FFFFFF' : '#64748B'
           }}
         >
-          📖 Bill Khata
+          📖 Khata
         </button>
         <button
           onClick={() => setActiveTab('WEB_ORDERS')}
+          className="billbook-tab-btn"
           style={{
-            padding: '10px 20px',
+            padding: '9px 6px',
             borderRadius: '8px',
             fontWeight: 800,
-            fontSize: '14px',
+            fontSize: '12px',
             border: 'none',
             cursor: 'pointer',
-            backgroundColor: activeTab === 'WEB_ORDERS' ? 'var(--cw-color-primary)' : 'transparent',
+            textAlign: 'center',
+            backgroundColor: activeTab === 'WEB_ORDERS' ? 'var(--cw-color-primary)' : '#F1F5F9',
             color: activeTab === 'WEB_ORDERS' ? '#FFFFFF' : '#64748B'
           }}
         >
-          🌐 Website Orders Feed ({webOrders.length})
+          🌐 Orders ({webOrders.length})
         </button>
       </div>
 
@@ -1452,7 +1452,7 @@ export default function BillbookPosPage() {
               <div ref={searchContainerRef} style={{ position: 'relative', marginBottom: '16px' }}>
                 <div className="billbook-search-row" style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
                   {/* Search Input Box */}
-                  <div style={{ flex: 1, minWidth: '200px', position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <div style={{ flex: 1, minWidth: 0, position: 'relative', display: 'flex', alignItems: 'center' }}>
                     <span style={{ position: 'absolute', left: '12px', color: '#94A3B8', fontSize: '15px', pointerEvents: 'none' }}>🔍</span>
                     <input
                       type="text"
@@ -1499,7 +1499,7 @@ export default function BillbookPosPage() {
                     )}
                   </div>
 
-                  <div className="billbook-stepper-add-group" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <div className="billbook-stepper-add-group" style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', width: '100%' }}>
                     {/* Quantity Stepper */}
                     <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #CBD5E1', borderRadius: '8px', overflow: 'hidden', height: '42px', backgroundColor: '#F8FAFC' }}>
                       <button
@@ -2942,18 +2942,23 @@ export default function BillbookPosPage() {
           }
         }
         @media (max-width: 640px) {
+          /* Tabs: already grid 4-col, shrink font further if needed */
+          .billbook-tab-btn {
+            font-size: 11px !important;
+            padding: 8px 2px !important;
+          }
+          /* Search row stacks vertically */
           .billbook-search-row {
             flex-direction: column !important;
             align-items: stretch !important;
+            gap: 8px !important;
           }
+          /* Stepper + Add + Custom: stepper left, buttons fill remaining */
           .billbook-stepper-add-group {
-            display: flex !important;
+            display: grid !important;
+            grid-template-columns: auto 1fr 1fr !important;
             width: 100% !important;
-            gap: 10px !important;
-          }
-          .billbook-stepper-add-group button[type="button"]:last-child {
-            flex: 1 !important;
-            justify-content: center !important;
+            gap: 6px !important;
           }
         }
       `}</style>
