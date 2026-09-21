@@ -877,7 +877,7 @@ export default function BillbookPosPage() {
   const currentGrandTotal = calculation ? calculation.roundedTotal : Math.round(currentSubtotal - currentDiscount);
 
   return (
-    <div style={{ maxWidth: '1400px', margin: '0 auto', width: '100%', overflowX: 'hidden' }}>
+    <div style={{ maxWidth: '1400px', margin: '0 auto', width: '100%' }}>
       {/* Top Navigation Tabs */}
       <div
         className="billbook-top-tabs"
@@ -1591,7 +1591,7 @@ export default function BillbookPosPage() {
                       position: 'absolute',
                       top: '100%',
                       left: 0,
-                      right: '150px',
+                      right: 0,
                       marginTop: '6px',
                       backgroundColor: '#FFFFFF',
                       borderRadius: '8px',
@@ -1599,7 +1599,7 @@ export default function BillbookPosPage() {
                       boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05)',
                       maxHeight: '340px',
                       overflowY: 'auto',
-                      zIndex: 50
+                      zIndex: 9999
                     }}
                   >
                     {filteredBillableItems.length === 0 ? (
