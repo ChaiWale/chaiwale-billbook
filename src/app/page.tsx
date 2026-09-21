@@ -714,7 +714,7 @@ export default function BillbookPosPage() {
               invoiceNumber: invoiceRes.invoice.invoiceNumber,
               customerPin: finalPin !== '----' ? finalPin : prev.customerPin,
               customerTotalDue: targetOffice ? realDue : prev.customerTotalDue,
-              pdfDownloadUrl: getInvoicePdfUrl(invoiceRes.invoice.invoice_number),
+              pdfDownloadUrl: getInvoicePdfUrl(invoiceRes.invoice.invoiceNumber),
               whatsAppUrl: generatedWaUrl
             }
           : null
@@ -773,7 +773,7 @@ export default function BillbookPosPage() {
         subtotal: invoiceRes.calculation.subtotal,
         discount: invoiceRes.calculation.totalDiscount,
         grandTotal: invoiceRes.calculation.roundedTotal,
-        pdfDownloadUrl: getInvoicePdfUrl(invoiceRes.invoice.invoice_number)
+        pdfDownloadUrl: getInvoicePdfUrl(invoiceRes.invoice.invoiceNumber)
       });
       setThermalReceiptModalOpen(true);
     } catch (err: any) {
@@ -845,7 +845,7 @@ export default function BillbookPosPage() {
       subtotal: sub,
       discount: disc,
       grandTotal: tot,
-      pdfDownloadUrl: lastInvoice?.invoice?.invoice_number ? getInvoicePdfUrl(lastInvoice.invoice.invoice_number) : undefined,
+      pdfDownloadUrl: lastInvoice?.invoice?.invoiceNumber ? getInvoicePdfUrl(lastInvoice.invoice.invoiceNumber) : undefined,
       whatsAppUrl: lastCreditKhataEntry?.whatsAppUrl
     });
     setThermalReceiptModalOpen(true);
@@ -1425,7 +1425,7 @@ export default function BillbookPosPage() {
                 </button>
                 {lastInvoice?.invoice?.id && (
                   <a
-                    href={getInvoicePdfUrl(lastInvoice.invoice.invoice_number)}
+                    href={getInvoicePdfUrl(lastInvoice.invoice.invoiceNumber)}
                     target="_blank"
                     rel="noreferrer"
                     style={{ padding: '6px 12px', backgroundColor: '#F1F5F9', color: '#0F172A', textDecoration: 'none', borderRadius: '4px', fontWeight: 700, fontSize: '12px', display: 'flex', alignItems: 'center' }}
