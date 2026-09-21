@@ -519,11 +519,10 @@ export async function fetchPrintPayload(params: {
 }
 
 /**
- * Get direct download URL for Invoice PDF
+ * Get direct URL for Invoice PDF (served through bills.chaiwale.co.in domain)
  */
 export function getInvoicePdfUrl(invoiceId: string): string {
-  const token = getBillbookAuthToken();
-  return `${BACKEND_URL}/api/v1/documents/pdf/invoice/${encodeURIComponent(invoiceId)}?token=${token || ''}`;
+  return `/api/pdf/invoice/${encodeURIComponent(invoiceId)}`;
 }
 
 /**

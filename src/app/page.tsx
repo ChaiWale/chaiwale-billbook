@@ -49,7 +49,43 @@ export default function BillbookPosPage() {
   const [transactionRef, setTransactionRef] = useState<string>('');
   const [discountPercent, setDiscountPercent] = useState<number>(0);
   const [selectedProductId, setSelectedProductId] = useState<string>('');
-  const [billDate, setBillDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  // Indian Standard Time (IST) Helpers
+  const getTodayISTDate = () => {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+  };
+
+  const getEffectiveIssueIso = (dateStr: string) => {
+    const today = getTodayISTDate();
+    if (!dateStr || dateStr === today) {
+      return new Date().toISOString();
+    }
+    const now = new Date();
+    const d = new Date(dateStr);
+    d.setUTCHours(now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds(), now.getUTCMilliseconds());
+    return d.toISOString();
+  };
+
+  const formatISTDate = (isoOrDate: string | Date | undefined) => {
+    if (!isoOrDate) return '-';
+    return new Date(isoOrDate).toLocaleDateString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    });
+  };
+
+  const formatISTTime = (isoOrDate: string | Date | undefined) => {
+    if (!isoOrDate) return '';
+    return new Date(isoOrDate).toLocaleTimeString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  };
+
+  const [billDate, setBillDate] = useState<string>(() => getTodayISTDate());
 
   // Walk-in / Counter Customer Name & Mobile (Optional for Cash/UPI, prints on bill)
   const [walkinCustomerName, setWalkinCustomerName] = useState<string>('');
@@ -393,7 +429,7 @@ export default function BillbookPosPage() {
       setThermalReceiptData({
         receiptType: inv.status === 'UNPAID' || inv.invoice_type === 'CORPORATE_CREDIT' ? 'CREDIT_BILL' : 'CUSTOMER_BILL',
         invoiceNumber: inv.invoice_number,
-        date: new Date(inv.issued_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) + ', ' + new Date(inv.issued_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+        date: `${formatISTDate(inv.issued_at || (inv as any).created_at)}, ${formatISTTime(inv.issued_at || (inv as any).created_at)}`,
         paymentMode: payMode,
         customerName: custName || undefined,
         customerPhone: custPhone || undefined,
@@ -577,7 +613,7 @@ export default function BillbookPosPage() {
     setThermalReceiptData({
       receiptType: isCredit ? 'CREDIT_BILL' : 'CUSTOMER_BILL',
       invoiceNumber: tempInvNum,
-      date: new Date(billDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) + ', ' + new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+      date: `${formatISTDate(billDate)}, ${formatISTTime(new Date())}`,
       paymentMode: isCredit ? 'CREDIT' : paymentMode,
       customerName: effCustName || undefined,
       customerPhone: effCustPhone || undefined,
@@ -621,7 +657,7 @@ export default function BillbookPosPage() {
         department: targetOffice?.company_name || targetOffice?.floor_unit || (effCustName ? `${effCustName}${effCustPhone ? ` (${effCustPhone})` : ''}` : department) || undefined,
         customerName: effCustName || undefined,
         customerPhone: effCustPhone || undefined,
-        issueDate: billDate,
+        issueDate: getEffectiveIssueIso(billDate),
         paymentMode: isCredit ? 'CREDIT' : paymentMode,
         transactionRef: transactionRef || undefined,
         items: cart.map((c) => ({
@@ -642,7 +678,7 @@ export default function BillbookPosPage() {
 
       let generatedWaUrl: string | undefined = undefined;
       if (isCredit && targetOffice) {
-        const formattedBillDate = new Date(billDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+        const formattedBillDate = formatISTDate(billDate);
         const itemsSummary = cart.map(c => `${c.quantity}x ${c.name}`).join(', ');
         const waMsg = `Namaste ${targetOffice.name}, your Chaiwale Credit Bill #${invoiceRes.invoice.invoiceNumber} (${formattedBillDate}) of ₹${realRoundedTotal} [${itemsSummary}] has been recorded. Total Outstanding Khata Balance: ₹${realDue}. View itemized statement with your 4-digit PIN ${finalPin} at https://chaiwale.co.in/check-bill`;
         const waLinkRes = buildWhatsAppUrl(targetOffice.phone, waMsg);
@@ -705,7 +741,7 @@ export default function BillbookPosPage() {
       const invoiceRes = await generateInvoice({
         orderId: order.id,
         invoiceType: 'DIRECT',
-        issueDate: billDate,
+        issueDate: getEffectiveIssueIso(billDate),
         paymentMode: (order.payment_mode as any) || 'CASH',
         transactionRef: order.transaction_ref,
         items: (order.items || []).map((it) => ({
@@ -722,7 +758,7 @@ export default function BillbookPosPage() {
       setThermalReceiptData({
         receiptType: 'CUSTOMER_BILL',
         invoiceNumber: invoiceRes.invoice.invoiceNumber,
-        date: new Date(billDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) + ', ' + new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+        date: `${formatISTDate(billDate)}, ${formatISTTime(new Date())}`,
         paymentMode: order.payment_mode || 'CASH',
         customerName: order.customer_name || 'Online Customer',
         customerPhone: (order as any).customer_phone || undefined,
@@ -771,7 +807,7 @@ export default function BillbookPosPage() {
     setThermalReceiptData({
       receiptType: 'KOT',
       orderNumber: lastInvoice?.invoice?.invoiceNumber || `KOT-${Date.now().toString().slice(-4)}`,
-      date: new Date(billDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) + ', ' + new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+      date: `${formatISTDate(billDate)}, ${formatISTTime(new Date())}`,
       paymentMode: paymentMode,
       customerName: selectedKhataOffice?.name || newCustomerName || undefined,
       customerAddress: selectedKhataOffice?.floor_unit || department || 'Counter Walk-in',
@@ -798,7 +834,7 @@ export default function BillbookPosPage() {
     setThermalReceiptData({
       receiptType: customerType === 'Corporate Bill' ? 'CREDIT_BILL' : 'CUSTOMER_BILL',
       invoiceNumber: lastInvoice?.invoice?.invoiceNumber || `REC-${Date.now().toString().slice(-4)}`,
-      date: new Date(billDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) + ', ' + new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+      date: `${formatISTDate(billDate)}, ${formatISTTime(new Date())}`,
       paymentMode: paymentMode,
       customerName: selectedKhataOffice?.name || newCustomerName || undefined,
       customerPhone: selectedKhataOffice?.phone || newCustomerPhone || undefined,
@@ -1038,9 +1074,9 @@ export default function BillbookPosPage() {
                           {inv.invoice_number}
                         </td>
                         <td style={{ padding: '10px 14px', color: '#475569', whiteSpace: 'nowrap' }}>
-                          {new Date(inv.issued_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          {formatISTDate(inv.issued_at || (inv as any).created_at)}
                           <div style={{ fontSize: '11px', color: '#94A3B8' }}>
-                            {new Date(inv.issued_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                            {formatISTTime(inv.issued_at || (inv as any).created_at)}
                           </div>
                         </td>
                         <td style={{ padding: '10px 14px' }}>
@@ -1979,7 +2015,7 @@ export default function BillbookPosPage() {
                 </div>
               </div>
 
-              {/* UPI UTR input & QR launcher if mode is UPI */}
+              {/* UPI QR launcher if mode is UPI */}
               {paymentMode === 'UPI' && (
                 <div style={{ marginBottom: '16px', padding: '10px 12px', backgroundColor: '#EFF6FF', borderRadius: '8px', border: '1px solid #BFDBFE' }}>
                   <button
@@ -1987,35 +2023,25 @@ export default function BillbookPosPage() {
                     onClick={() => setShowUpiModal(true)}
                     style={{
                       width: '100%',
-                      padding: '8px 12px',
+                      padding: '9px 12px',
                       backgroundColor: '#2563EB',
                       color: '#FFFFFF',
                       border: 'none',
                       borderRadius: '6px',
-                      fontSize: '12px',
+                      fontSize: '13px',
                       fontWeight: 800,
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: '6px',
-                      marginBottom: '8px',
+                      marginBottom: '6px',
                       boxShadow: '0 2px 6px rgba(37, 99, 235, 0.3)'
                     }}
                   >
                     📱 Scan Chaiwale UPI QR (₹{currentGrandTotal})
                   </button>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#1E3A8A', marginBottom: '4px' }}>
-                    UPI Reference / UTR Number (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Enter 12-digit UPI UTR..."
-                    value={transactionRef}
-                    onChange={(e) => setTransactionRef(e.target.value)}
-                    style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '12px' }}
-                  />
-                  <div style={{ fontSize: '10px', color: '#1E40AF', marginTop: '4px', fontWeight: 600 }}>
+                  <div style={{ fontSize: '11px', color: '#1E40AF', textAlign: 'center', fontWeight: 600 }}>
                     Official UPI ID: <strong>chaiwale@ptyes</strong>
                   </div>
                 </div>
