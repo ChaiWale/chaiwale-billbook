@@ -174,7 +174,49 @@ export const ThermalReceiptModal: React.FC<Props> = ({ isOpen, onClose, data }) 
   };
 
   const handlePrint = () => {
-    window.print();
+    const receiptEl = document.getElementById('chaiwale-receipt-slip');
+    if (!receiptEl) { window.print(); return; }
+
+    // Collect all inline styles from the receipt element
+    const receiptHtml = receiptEl.outerHTML;
+
+    // Open a clean print window with isolated receipt content
+    const printWin = window.open('', '_blank', 'width=420,height=700,scrollbars=yes');
+    if (!printWin) { window.print(); return; }
+
+    printWin.document.write(`
+      <!DOCTYPE html>
+      <html lang="en">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>Chaiwale Receipt</title>
+          <style>
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body {
+              background: #ffffff;
+              display: flex;
+              justify-content: center;
+              padding: 8px;
+              font-family: 'Courier New', Courier, monospace;
+            }
+            @media print {
+              @page { size: 80mm auto; margin: 2mm; }
+              body { padding: 0; }
+            }
+          </style>
+        </head>
+        <body>
+          ${receiptHtml}
+          <script>
+            window.onload = function() {
+              setTimeout(function() { window.print(); window.close(); }, 350);
+            };
+          <\/script>
+        </body>
+      </html>
+    `);
+    printWin.document.close();
   };
 
   const isKOT = viewMode === 'KOT';
@@ -807,72 +849,9 @@ export const ThermalReceiptModal: React.FC<Props> = ({ isOpen, onClose, data }) 
         }
 
         @media print {
-          @page {
-            size: auto;
-            margin: 4mm;
-          }
-          body {
-            background: #FFFFFF !important;
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-          body * {
-            visibility: hidden !important;
-          }
-          .receipt-modal-backdrop,
-          .receipt-modal-backdrop * {
-            visibility: hidden !important;
-          }
-          #chaiwale-receipt-slip,
-          #chaiwale-receipt-slip * {
-            visibility: visible !important;
-          }
-          .receipt-modal-backdrop {
-            position: static !important;
-            background: transparent !important;
-            padding: 0 !important;
-            backdrop-filter: none !important;
-            overflow: visible !important;
-            inset: auto !important;
-            display: block !important;
-          }
-          .receipt-modal-backdrop > div {
-            position: static !important;
-            max-width: none !important;
-            max-height: none !important;
-            height: auto !important;
-            overflow: visible !important;
-            animation: none !important;
-            display: block !important;
-          }
-          .receipt-dispenser-hood-unit,
-          .receipt-action-buttons,
-          .receipt-modal-backdrop button {
+          /* Suppress main page when printing from the modal overlay */
+          body > *:not(.receipt-modal-backdrop) {
             display: none !important;
-          }
-          .receipt-paper-viewport {
-            position: static !important;
-            max-height: none !important;
-            height: auto !important;
-            overflow: visible !important;
-            perspective: none !important;
-            display: block !important;
-          }
-          #chaiwale-receipt-slip {
-            position: static !important;
-            width: 100% !important;
-            max-width: 320px !important;
-            margin: 0 auto !important;
-            height: auto !important;
-            max-height: none !important;
-            overflow: visible !important;
-            transform: none !important;
-            animation: none !important;
-            box-shadow: none !important;
-            clip-path: none !important;
-            border: 1px dashed #71717A !important;
-            page-break-inside: avoid !important;
-            break-inside: avoid !important;
           }
         }
       `}</style>
