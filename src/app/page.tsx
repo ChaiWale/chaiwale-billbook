@@ -107,6 +107,20 @@ export default function BillbookPosPage() {
   const [whatsAppTargetPhone, setWhatsAppTargetPhone] = useState<string>('');
 
   // Invoices / Bills History State
+  const [cachedBillsCount, setCachedBillsCount] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('cw_pos_bills_count');
+      return saved ? parseInt(saved, 10) : 0;
+    }
+    return 0;
+  });
+  const [cachedOrdersCount, setCachedOrdersCount] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('cw_pos_orders_count');
+      return saved ? parseInt(saved, 10) : 0;
+    }
+    return 0;
+  });
   const [invoicesList, setInvoicesList] = useState<InvoiceRecordDto[]>([]);
   const [loadingInvoices, setLoadingInvoices] = useState<boolean>(false);
   const [invoicesSearch, setInvoicesSearch] = useState<string>('');
@@ -350,37 +364,51 @@ export default function BillbookPosPage() {
     runServerCalculation(cart, discountPercent, customerType);
   }, [cart, discountPercent, customerType, runServerCalculation]);
 
-  // Load online orders when tab switched
-  const loadOnlineOrders = async () => {
-    setLoadingOrders(true);
+  // Load online orders (silent prefetch or full loading)
+  const loadOnlineOrders = useCallback(async (silent = false) => {
+    if (!silent) setLoadingOrders(true);
     try {
       const orders = await fetchWebOrders(20);
       setWebOrders(orders);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('cw_pos_orders_count', String(orders.length));
+        setCachedOrdersCount(orders.length);
+      }
     } catch (err: any) {
       console.error('Error fetching online orders:', err);
     } finally {
-      setLoadingOrders(false);
-    }
-  };
-
-  // Load past invoices for Bills history
-  const loadInvoices = useCallback(async () => {
-    setLoadingInvoices(true);
-    try {
-      const data = await fetchInvoices({ limit: 100 });
-      setInvoicesList(data);
-    } catch (err: any) {
-      console.error('Failed to load invoices:', err);
-    } finally {
-      setLoadingInvoices(false);
+      if (!silent) setLoadingOrders(false);
     }
   }, []);
 
-  useEffect(() => {
-    if (activeTab === 'BILLS') {
-      loadInvoices();
+  // Load past invoices for Bills history (silent prefetch or full loading)
+  const loadInvoices = useCallback(async (silent = false) => {
+    if (!silent) setLoadingInvoices(true);
+    try {
+      const data = await fetchInvoices({ limit: 100 });
+      setInvoicesList(data);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('cw_pos_bills_count', String(data.length));
+        setCachedBillsCount(data.length);
+      }
+    } catch (err: any) {
+      console.error('Failed to load invoices:', err);
+    } finally {
+      if (!silent) setLoadingInvoices(false);
     }
-  }, [activeTab, loadInvoices]);
+  }, []);
+
+  // Background pre-fetch of Bills and Web Orders count on terminal startup
+  useEffect(() => {
+    loadInvoices(true);
+    loadOnlineOrders(true);
+  }, [loadInvoices, loadOnlineOrders]);
+
+  useEffect(() => {
+    if (activeTab === 'BILLS' && invoicesList.length === 0) {
+      loadInvoices(false);
+    }
+  }, [activeTab, invoicesList.length, loadInvoices]);
 
   // Filtered invoices for Bills History tab
   const filteredInvoices = useMemo(() => {
@@ -968,7 +996,9 @@ G-31, Vardhman Grand Plaza, Rohini Sector-3, New Delhi`;
         <button
           onClick={() => {
             setActiveTab('BILLS');
-            loadInvoices();
+            if (invoicesList.length === 0) {
+              loadInvoices(false);
+            }
           }}
           className="billbook-tab-btn"
           style={{
@@ -983,7 +1013,7 @@ G-31, Vardhman Grand Plaza, Rohini Sector-3, New Delhi`;
             color: activeTab === 'BILLS' ? '#FFFFFF' : '#64748B'
           }}
         >
-          📋 Bills ({invoicesList.length})
+          📋 Bills ({invoicesList.length > 0 ? invoicesList.length : cachedBillsCount > 0 ? cachedBillsCount : 0})
         </button>
         <button
           onClick={() => setActiveTab('KHATABOOK')}
@@ -1003,7 +1033,12 @@ G-31, Vardhman Grand Plaza, Rohini Sector-3, New Delhi`;
           📖 Khata
         </button>
         <button
-          onClick={() => setActiveTab('WEB_ORDERS')}
+          onClick={() => {
+            setActiveTab('WEB_ORDERS');
+            if (webOrders.length === 0) {
+              loadOnlineOrders(false);
+            }
+          }}
           className="billbook-tab-btn"
           style={{
             padding: '9px 6px',
@@ -1017,7 +1052,7 @@ G-31, Vardhman Grand Plaza, Rohini Sector-3, New Delhi`;
             color: activeTab === 'WEB_ORDERS' ? '#FFFFFF' : '#64748B'
           }}
         >
-          🌐 Orders ({webOrders.length})
+          🌐 Orders ({webOrders.length > 0 ? webOrders.length : cachedOrdersCount > 0 ? cachedOrdersCount : 0})
         </button>
       </div>
 
@@ -1031,7 +1066,7 @@ G-31, Vardhman Grand Plaza, Rohini Sector-3, New Delhi`;
               <p style={{ fontSize: '11.5px', color: '#64748B', margin: '3px 0 0 0' }}>Tap any invoice to view details, print slip or download PDF.</p>
             </div>
             <button
-              onClick={loadInvoices}
+              onClick={() => loadInvoices(false)}
               disabled={loadingInvoices}
               style={{ padding: '7px 12px', backgroundColor: '#F1F5F9', border: '1px solid #CBD5E1', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}
             >
@@ -1410,7 +1445,7 @@ G-31, Vardhman Grand Plaza, Rohini Sector-3, New Delhi`;
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A' }}>Incoming Storefront Online Orders</h2>
             <button
-              onClick={loadOnlineOrders}
+              onClick={() => loadOnlineOrders(false)}
               style={{ padding: '6px 14px', backgroundColor: '#F1F5F9', border: '1px solid #CBD5E1', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 600 }}
             >
               🔄 Refresh Orders
