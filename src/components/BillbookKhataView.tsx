@@ -289,7 +289,7 @@ export const BillbookKhataView: React.FC = () => {
         const newDue = curr.balance_due + entryTotal;
         const pin = curr.client_pin || curr.generated_pin || '----';
         const formattedDate = new Date(entryDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-        const waMsg = `Namaste ${curr.name}, Chaiwale Debit Bill (${formattedDate}) of ₹${entryTotal} [${entryQty}x ${entryItemName}] has been recorded. Total Khata Due: ₹${newDue}. Check statement with PIN ${pin} at https://chaiwale.co.in/check-bill`;
+        const waMsg = `Namaste ${curr.name}, Chaiwale Debit Bill (${formattedDate}) of ₹${entryTotal} [${entryQty}x ${entryItemName}] has been recorded. Total Khata Due: ₹${newDue}. Check statement with PIN ${pin} at https://chaiwale.co.in/check-bill?phone=${cleanPhone}&pin=${pin}`;
         const waUrl = cleanPhone ? `https://wa.me/${fullPhone}?text=${encodeURIComponent(waMsg)}` : undefined;
 
         setThermalReceiptData({
@@ -370,7 +370,7 @@ export const BillbookKhataView: React.FC = () => {
         const newDue = Math.max(0, curr.balance_due - amt);
         const pin = curr.client_pin || curr.generated_pin || '----';
         const formattedDate = new Date(paymentDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-        const waMsg = `Namaste ${curr.name}, payment of ₹${amt} received via ${paymentMode} on ${formattedDate}. Updated Outstanding Khata Balance: ₹${newDue}. View statement with PIN ${pin} at https://chaiwale.co.in/check-bill`;
+        const waMsg = `Namaste ${curr.name}, payment of ₹${amt} received via ${paymentMode} on ${formattedDate}. Updated Outstanding Khata Balance: ₹${newDue}. View statement with PIN ${pin} at https://chaiwale.co.in/check-bill?phone=${cleanPhone}&pin=${pin}`;
         const waUrl = cleanPhone ? `https://wa.me/${fullPhone}?text=${encodeURIComponent(waMsg)}` : undefined;
 
         setThermalReceiptData({
@@ -412,7 +412,7 @@ export const BillbookKhataView: React.FC = () => {
 
     const pin = statement.office.client_pin || '----';
     let text = statement.whatsappText;
-    text += `\n📄 *Official Itemized Statement & Verification:*\nhttps://chaiwale.co.in/check-bill (Enter PIN: ${pin})\n`;
+    text += `\n📄 *Official Itemized Statement & Verification:*\nhttps://chaiwale.co.in/check-bill?phone=${cleanPhone}&pin=${pin} (PIN: ${pin})\n`;
 
     const url = `https://wa.me/${fullPhone}?text=${encodeURIComponent(text)}`;
     window.open(url, '_blank');

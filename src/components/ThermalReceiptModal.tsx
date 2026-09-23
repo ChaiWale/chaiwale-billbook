@@ -29,6 +29,10 @@ export interface ThermalReceiptData {
   grandTotal?: number;
   pdfDownloadUrl?: string;
   whatsAppUrl?: string;
+  storeName?: string;
+  storeTagline?: string;
+  storeAddress?: string;
+  storePhone?: string;
 }
 
 interface Props {
@@ -41,13 +45,34 @@ export const ThermalReceiptModal: React.FC<Props> = ({ isOpen, onClose, data }) 
   const [animState, setAnimState] = useState<'retracted' | 'printing-anim' | 'printed' | 'torn-anim'>('retracted');
   const [cutterFlash, setCutterFlash] = useState(false);
   const [viewMode, setViewMode] = useState<'CUSTOMER_BILL' | 'KOT'>('CUSTOMER_BILL');
+  const [liveStoreProfile, setLiveStoreProfile] = useState<{
+    store_name?: string;
+    tagline?: string;
+    address?: string;
+    phone?: string;
+  } | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+      fetch(`${BACKEND}/api/v1/config/store-profile`)
+        .then(r => r.json())
+        .then(res => {
+          if (res?.success && res?.data) {
+            setLiveStoreProfile(res.data);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (data) {
       setViewMode(data.receiptType === 'KOT' ? 'KOT' : 'CUSTOMER_BILL');
     }
   }, [data]);
+
 
   // Web Audio Synthesizer for Thermal Printer Sound FX
   const playThermalPrinterSound = (durationMs = 2200) => {
@@ -457,15 +482,15 @@ export const ThermalReceiptModal: React.FC<Props> = ({ isOpen, onClose, data }) 
                   />
                 </div>
                 <div style={{ fontSize: '18px', fontWeight: 900, letterSpacing: '2px', color: '#000000', textTransform: 'uppercase' }}>
-                  CHAIWALE
+                  {data?.storeName || liveStoreProfile?.store_name || 'CHAIWALE'}
                 </div>
                 <div style={{ fontSize: '9px', color: '#4B5563', fontWeight: 700, margin: '2px 0 3px' }}>
-                  {isKOT ? '🔥 KITCHEN ORDER TICKET (KOT) 🔥' : 'Taste of Desi Swag • Cafe & Refreshments'}
+                  {isKOT ? '🔥 KITCHEN ORDER TICKET (KOT) 🔥' : (data?.storeTagline || liveStoreProfile?.tagline || 'Taste of Desi Swag • Cafe & Refreshments')}
                 </div>
                 {!isKOT && (
                   <div style={{ fontSize: '8.5px', color: '#6B7280', lineHeight: 1.3 }}>
-                    Rohini Sector-7, New Delhi - 110085<br />
-                    Tel / WhatsApp: +91 92890 28620 • @chaiwale.co.in
+                    {data?.storeAddress || liveStoreProfile?.address || 'G-31, Vardhman Grand Plaza, Mangalam Place, Rohini Sector-3, New Delhi - 110085'}<br />
+                    Tel / WhatsApp: {data?.storePhone || liveStoreProfile?.phone || '+91 93101 12564'} • support@chaiwale.co.in
                   </div>
                 )}
               </div>

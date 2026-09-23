@@ -558,9 +558,48 @@ export async function fetchInvoiceById(invoiceId: string): Promise<InvoiceDetail
   return data.data;
 }
 
+export async function deleteInvoice(invoiceId: string): Promise<boolean> {
+  const res = await authFetch(`${BACKEND_URL}/api/v1/billing/invoices/${encodeURIComponent(invoiceId)}`, {
+    method: 'DELETE'
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || `Failed to delete invoice ${invoiceId}`);
+  }
+  return true;
+}
+
+export async function fetchStoreProfile(): Promise<{
+  store_name: string;
+  tagline: string;
+  address: string;
+  phone: string;
+  whatsapp: string;
+  email: string;
+  upi_id: string;
+}> {
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/v1/config/store-profile`);
+    if (!res.ok) throw new Error('Failed');
+    const json = await res.json();
+    return json.data;
+  } catch {
+    return {
+      store_name: 'Chaiwale',
+      tagline: 'Taste of Desi Swag • Cafe & Refreshments',
+      address: 'G-31, Vardhman Grand Plaza, Mangalam Place, M2K Road, Rohini Sector-3, New Delhi – 110085',
+      phone: '+91 93101 12564',
+      whatsapp: '919310112564',
+      email: 'support@chaiwale.co.in',
+      upi_id: 'chaiwale@ptyes'
+    };
+  }
+}
+
 /**
  * Fetch Brand Details & Official WhatsApp Number
  */
+
 export async function fetchBrandConfig(): Promise<{
   brandName: string;
   tagline: string;

@@ -14,7 +14,9 @@ import {
   addKhataEntry,
   fetchInvoices,
   fetchInvoiceById,
+  deleteInvoice,
   MenuItemDto,
+
   BillingCalculationResultDto,
   GeneratedInvoiceResponseDto,
   WebOrderDto,
@@ -450,7 +452,27 @@ export default function BillbookPosPage() {
     }
   };
 
+  const [deletingInvoiceId, setDeletingInvoiceId] = useState<string | null>(null);
+
+  const handleDeleteInvoice = async (inv: InvoiceRecordDto) => {
+    if (!confirm(`Are you sure you want to permanently delete bill #${inv.invoice_number}? This will also delete the linked order and cannot be undone.`)) {
+      return;
+    }
+    setDeletingInvoiceId(inv.id);
+    try {
+      await deleteInvoice(inv.id);
+      setSelectedInvoice(null);
+      await loadInvoices();
+      showAlert('Bill Deleted', `Bill #${inv.invoice_number} and linked order were permanently deleted.`, 'success');
+    } catch (err: any) {
+      showAlert('Delete Failed', `Could not delete bill: ${err.message}`, 'error');
+    } finally {
+      setDeletingInvoiceId(null);
+    }
+  };
+
   // Cart operations
+
   const addItemToCart = (itemToAdd?: { productId: string; name: string; unitPrice: number }, qty?: number) => {
     let target = itemToAdd;
     if (!target) {
@@ -677,24 +699,49 @@ export default function BillbookPosPage() {
       const realDue = targetOffice ? (targetOffice.balance_due + realRoundedTotal) : realRoundedTotal;
       const finalPin = targetOffice?.client_pin || targetOffice?.generated_pin || '----';
 
+      const custPin = (invoiceRes.invoice as any)?.customerPin || finalPin || '----';
+      const rawPhone = effCustPhone || targetOffice?.phone || '';
+      const cleanPhone = rawPhone.replace(/\D/g, '').slice(-10);
+      const custName = effCustName || targetOffice?.name || 'Customer';
+      const itemsSummary = cart.map(c => `${c.quantity}x ${c.name}`).join(', ');
+      const pMode = isCredit ? 'CREDIT' : paymentMode;
+      const pStatus = isCredit ? 'PENDING' : 'PAID';
+
       let generatedWaUrl: string | undefined = undefined;
-      if (isCredit && targetOffice) {
-        const formattedBillDate = formatISTDate(billDate);
-        const itemsSummary = cart.map(c => `${c.quantity}x ${c.name}`).join(', ');
-        const waMsg = `Namaste ${targetOffice.name}, your Chaiwale Credit Bill #${invoiceRes.invoice.invoiceNumber} (${formattedBillDate}) of ₹${realRoundedTotal} [${itemsSummary}] has been recorded. Total Outstanding Khata Balance: ₹${realDue}. View itemized statement with your 4-digit PIN ${finalPin} at https://chaiwale.co.in/check-bill`;
-        const waLinkRes = buildWhatsAppUrl(targetOffice.phone, waMsg);
+      if (cleanPhone && cleanPhone.length >= 7) {
+        const pinParam = custPin !== '----' ? `&pin=${custPin}` : '';
+        const portalUrl = `https://chaiwale.co.in/check-bill?phone=${cleanPhone}${pinParam}&bill=${invoiceRes.invoice.invoiceNumber}`;
+        const credsBlock = custPin !== '----'
+          ? `\nYour Check-Bill Portal Login Credentials:\n📱 Mobile: ${cleanPhone}\n🔑 Access PIN: ${custPin}\n`
+          : '';
+
+        const waMsg = `Hello ${custName}! 🙏
+Thank you for visiting Chaiwale.
+
+Your Bill #${invoiceRes.invoice.invoiceNumber} has been generated.
+Items: ${itemsSummary}
+Total Amount: ₹${realRoundedTotal} (${pStatus} via ${pMode})
+
+📄 View & Download your Tax Invoice & Thermal Receipt:
+${portalUrl}
+${credsBlock}
+Chaiwale — Taste of Desi Swag
+G-31, Vardhman Grand Plaza, Rohini Sector-3, New Delhi`;
+
+        const waLinkRes = buildWhatsAppUrl(cleanPhone, waMsg);
         if (waLinkRes.success && waLinkRes.url) {
           generatedWaUrl = waLinkRes.url;
         }
 
         setLastCreditKhataEntry({
-          officeName: targetOffice.name,
-          phone: targetOffice.phone,
-          pin: finalPin,
+          officeName: custName,
+          phone: cleanPhone,
+          pin: custPin,
           totalDue: realDue,
           whatsAppUrl: generatedWaUrl
         });
       }
+
 
       setSuccessMessage(
         `Invoice ${invoiceRes.invoice.invoiceNumber} created! ${
@@ -1231,7 +1278,7 @@ export default function BillbookPosPage() {
                   </div>
 
                   {/* Action Buttons */}
-                  <div style={{ padding: '12px 20px 16px', borderTop: '1px solid #F1F5F9', display: 'flex', gap: '10px' }}>
+                  <div style={{ padding: '12px 20px 16px', borderTop: '1px solid #F1F5F9', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                     <button
                       onClick={async () => {
                         setSelectedInvoice(null);
@@ -1239,26 +1286,93 @@ export default function BillbookPosPage() {
                       }}
                       disabled={loadingThermalForInvoiceId === inv.id}
                       style={{
-                        flex: 1, padding: '13px 8px', backgroundColor: '#F97316', color: '#FFFFFF',
-                        border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 800,
-                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
+                        flex: '1 1 calc(25% - 8px)', minWidth: '95px', padding: '12px 6px', backgroundColor: '#F97316', color: '#FFFFFF',
+                        border: 'none', borderRadius: '10px', fontSize: '13px', fontWeight: 800,
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px'
                       }}
                     >
-                      {loadingThermalForInvoiceId === inv.id ? '⏳' : '🖨️'} Print Slip
+                      {loadingThermalForInvoiceId === inv.id ? '⏳' : '🖨️'} Slip
                     </button>
                     <a
                       href={getInvoicePdfUrl(inv.invoice_number)}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{
-                        flex: 1, padding: '13px 8px', backgroundColor: '#1D4ED8', color: '#FFFFFF',
-                        border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 800,
-                        textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
+                        flex: '1 1 calc(25% - 8px)', minWidth: '95px', padding: '12px 6px', backgroundColor: '#1D4ED8', color: '#FFFFFF',
+                        border: 'none', borderRadius: '10px', fontSize: '13px', fontWeight: 800,
+                        textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px'
                       }}
                     >
-                      📄 A4 PDF
+                      📄 PDF
                     </a>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const corp = inv.corporate_clients as any;
+                        const rawPhone = inv.orders?.customers?.phone || corp?.phone || (inv as any).customer_phone;
+                        let targetPhone = rawPhone ? rawPhone.replace(/\D/g, '') : '';
+                        if (!targetPhone || targetPhone.length < 10) {
+                          const input = window.prompt('Enter customer 10-digit WhatsApp number:');
+                          if (!input) return;
+                          targetPhone = input.replace(/\D/g, '');
+                        }
+                        if (targetPhone.length < 10) {
+                          alert('Please enter a valid 10-digit mobile number.');
+                          return;
+                        }
+                        const fullPhone = targetPhone.length === 10 ? `91${targetPhone}` : targetPhone;
+                        const clientPin = corp?.client_pin || '----';
+                        const link = `https://chaiwale.co.in/check-bill?phone=${targetPhone}${clientPin !== '----' ? `&pin=${clientPin}` : ''}&bill=${encodeURIComponent(inv.invoice_number)}`;
+                        const custName = inv.orders?.customer_name || corp?.name || corp?.company_name || 'Customer';
+                        const waMsg = `Namaste ${custName} ji! 🙏
+
+Your Chaiwale Bill #${inv.invoice_number} is ready.
+Total: ₹${Number(inv.grand_total).toFixed(0)} (${pMode}).
+
+View & download your official Tax Invoice (PDF) and Thermal Slip here:
+${link}
+
+Login credentials to check all your past bills:
+Mobile: ${targetPhone}
+PIN: ${clientPin}
+
+Thank you for choosing Chaiwale!
+Chaiwale — Vardhman Grand Plaza, Rohini Sector-3, Delhi`;
+
+                        window.open(`https://wa.me/${fullPhone}?text=${encodeURIComponent(waMsg)}`, '_blank');
+                      }}
+                      style={{
+                        flex: '1 1 calc(25% - 8px)', minWidth: '105px', padding: '12px 6px', backgroundColor: '#25D366', color: '#FFFFFF',
+                        border: 'none', borderRadius: '10px', fontSize: '13px', fontWeight: 800,
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px'
+                      }}
+                      title="Send this bill to customer on WhatsApp"
+                    >
+                      💬 WhatsApp
+                    </button>
+                    <button
+                      onClick={() => handleDeleteInvoice(inv)}
+                      disabled={deletingInvoiceId === inv.id}
+                      style={{
+                        padding: '13px 14px',
+                        backgroundColor: '#DC2626',
+                        color: '#FFFFFF',
+                        border: 'none',
+                        borderRadius: '10px',
+                        fontSize: '14px',
+                        fontWeight: 800,
+                        cursor: deletingInvoiceId === inv.id ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '4px'
+                      }}
+                      title="Permanently delete this bill and linked order"
+                    >
+                      {deletingInvoiceId === inv.id ? '⏳' : '🗑️'}
+                    </button>
                   </div>
+
                 </div>
               </div>
             );
@@ -2083,7 +2197,7 @@ export default function BillbookPosPage() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
                   {[
                     { id: 'CASH', label: '💵 Cash' },
-                    { id: 'UPI', label: '📱 UPI QR' },
+                    { id: 'UPI', label: '⚡ 📱 UPI QR' },
                     { id: 'CREDIT', label: '📖 Credit' }
                   ].map((m) => (
                     <button
@@ -2095,14 +2209,15 @@ export default function BillbookPosPage() {
                         }
                       }}
                       style={{
-                        padding: '8px 4px',
+                        padding: '10px 4px',
                         fontSize: '11px',
-                        fontWeight: 700,
+                        fontWeight: 800,
                         borderRadius: '6px',
-                        border: 'none',
+                        border: paymentMode === m.id ? '2px solid transparent' : '1px solid #CBD5E1',
                         cursor: 'pointer',
-                        backgroundColor: paymentMode === m.id ? (m.id === 'CREDIT' ? '#DC2626' : '#166534') : '#F1F5F9',
-                        color: paymentMode === m.id ? '#FFFFFF' : '#475569'
+                        backgroundColor: paymentMode === m.id ? (m.id === 'CREDIT' ? '#DC2626' : m.id === 'UPI' ? '#2563EB' : '#166534') : '#FFFFFF',
+                        color: paymentMode === m.id ? '#FFFFFF' : '#475569',
+                        boxShadow: paymentMode === m.id ? '0 2px 6px rgba(0,0,0,0.15)' : 'none'
                       }}
                     >
                       {m.label}
@@ -2113,32 +2228,35 @@ export default function BillbookPosPage() {
 
               {/* UPI QR launcher if mode is UPI */}
               {paymentMode === 'UPI' && (
-                <div style={{ marginBottom: '16px', padding: '10px 12px', backgroundColor: '#EFF6FF', borderRadius: '8px', border: '1px solid #BFDBFE' }}>
+                <div style={{ marginBottom: '16px', padding: '12px 14px', backgroundColor: '#EFF6FF', borderRadius: '10px', border: '2px dashed #3B82F6', textAlign: 'center' }}>
                   <button
                     type="button"
                     onClick={() => setShowUpiModal(true)}
                     style={{
                       width: '100%',
-                      padding: '9px 12px',
+                      padding: '12px 16px',
                       backgroundColor: '#2563EB',
                       color: '#FFFFFF',
                       border: 'none',
-                      borderRadius: '6px',
-                      fontSize: '13px',
+                      borderRadius: '8px',
+                      fontSize: '14px',
                       fontWeight: 800,
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: '6px',
-                      marginBottom: '6px',
-                      boxShadow: '0 2px 6px rgba(37, 99, 235, 0.3)'
+                      gap: '8px',
+                      marginBottom: '8px',
+                      boxShadow: '0 4px 14px rgba(37, 99, 235, 0.4)',
+                      transition: 'transform 0.15s ease'
                     }}
+                    onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.02)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
                   >
-                    📱 Scan Chaiwale UPI QR (₹{currentGrandTotal})
+                    ⚡ Click to Show UPI QR Code (₹{currentGrandTotal}) ↗
                   </button>
-                  <div style={{ fontSize: '11px', color: '#1E40AF', textAlign: 'center', fontWeight: 600 }}>
-                    Official UPI ID: <strong>chaiwale@ptyes</strong>
+                  <div style={{ fontSize: '12px', color: '#1E40AF', fontWeight: 600 }}>
+                    Official UPI ID: <strong>chaiwale@ptyes</strong> • Instant Scan & Pay
                   </div>
                 </div>
               )}
@@ -2810,7 +2928,7 @@ export default function BillbookPosPage() {
               Chaiwale Official UPI QR
             </h3>
             <p style={{ fontSize: '12px', color: '#64748B', margin: '0 0 14px 0' }}>
-              Rohitash Khurana • Shubham Sharma
+              Scan to pay with any UPI App (GPay, PhonePe, Paytm, BHIM)
             </p>
 
             {/* QR Code Container */}
