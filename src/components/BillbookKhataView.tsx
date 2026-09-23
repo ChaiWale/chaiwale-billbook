@@ -16,6 +16,7 @@ import {
 } from '../services/billbook-api.client';
 import { ThermalReceiptModal, ThermalReceiptData } from './ThermalReceiptModal';
 import { ChaiwaleDialog, ChaiwaleDialogConfig } from './ChaiwaleDialog';
+import ChaiLoader from './ChaiLoader';
 
 export const BillbookKhataView: React.FC = () => {
   const [offices, setOffices] = useState<KhataOfficeDto[]>([]);
@@ -438,6 +439,11 @@ export const BillbookKhataView: React.FC = () => {
   const selectedOffice = offices.find((o) => o.id === selectedOfficeId);
   const totalMarketDue = offices.reduce((s, o) => s + (o.balance_due > 0 ? o.balance_due : 0), 0);
 
+  // Immediate authoritative metrics (prevent jumping from 0 to actual value)
+  const effectiveTotalBilled = statement ? statement.totalConsumption : (selectedOffice?.total_consumption ?? 0);
+  const effectiveTotalPaid = statement ? statement.totalPayments : (selectedOffice?.total_payments ?? 0);
+  const effectiveDue = statement ? statement.balanceDue : (selectedOffice?.balance_due ?? 0);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)', background: '#F8F9FA' }}>
       {/* Toast Notification */}
@@ -795,12 +801,12 @@ export const BillbookKhataView: React.FC = () => {
                         fontSize: '12px',
                         padding: '3px 10px',
                         borderRadius: '20px',
-                        background: selectedOffice.balance_due > 0 ? '#FEE2E2' : '#D1FAE5',
-                        color: selectedOffice.balance_due > 0 ? '#991B1B' : '#065F46',
+                        background: effectiveDue > 0 ? '#FEE2E2' : '#D1FAE5',
+                        color: effectiveDue > 0 ? '#991B1B' : '#065F46',
                         fontWeight: 700
                       }}
                     >
-                      {selectedOffice.balance_due > 0 ? `₹${selectedOffice.balance_due} Due` : 'All Cleared'}
+                      {effectiveDue > 0 ? `₹${effectiveDue.toLocaleString('en-IN')} Due` : 'All Cleared (₹0 Due)'}
                     </span>
                   </div>
 
@@ -1279,25 +1285,26 @@ export const BillbookKhataView: React.FC = () => {
                   boxShadow: '0 2px 8px rgba(0,0,0,0.04)'
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
                   <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#111827' }}>
                     📋 Date-Wise Canteen Consumption Ledger
                   </h4>
 
-                  {statement && (
-                    <div style={{ display: 'flex', gap: '16px', fontSize: '13px' }}>
-                      <span>Total Consumption: <strong>₹{statement.totalConsumption}</strong></span>
-                      {statement.totalPayments > 0 && (
-                        <span>Paid: <strong style={{ color: '#059669' }}>₹{statement.totalPayments}</strong></span>
-                      )}
-                      <span>Balance Due: <strong style={{ color: '#DC2626' }}>₹{statement.balanceDue}</strong></span>
-                    </div>
-                  )}
+                  <div style={{ display: 'flex', gap: '16px', fontSize: '13px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <span>Total Billed: <strong style={{ color: '#0F172A' }}>₹{effectiveTotalBilled.toLocaleString('en-IN')}</strong></span>
+                    <span>Total Paid: <strong style={{ color: '#059669' }}>₹{effectiveTotalPaid.toLocaleString('en-IN')}</strong></span>
+                    <span>Balance Due: <strong style={{ color: effectiveDue > 0 ? '#DC2626' : '#059669' }}>₹{effectiveDue.toLocaleString('en-IN')}</strong></span>
+                    {statementLoading && (
+                      <span style={{ fontSize: '11px', color: '#64748B', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        ⏳ Syncing date range...
+                      </span>
+                    )}
+                  </div>
                 </div>
 
-                {statementLoading ? (
-                  <div style={{ padding: '32px', textAlign: 'center', color: '#6B7280' }}>
-                    Loading statement...
+                {statementLoading && !statement ? (
+                  <div style={{ padding: '32px 16px', textAlign: 'center' }}>
+                    <ChaiLoader label="Loading Statement..." sublabel="Fetching date-wise consumption & payments..." />
                   </div>
                 ) : !statement || (statement.dateGroups.length === 0 && statement.payments.length === 0) ? (
                   <div style={{ padding: '32px', textAlign: 'center', color: '#9CA3AF', fontSize: '13px' }}>

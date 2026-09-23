@@ -27,6 +27,7 @@ import { BillbookKhataView } from '../components/BillbookKhataView';
 import { ThermalReceiptModal, ThermalReceiptData } from '../components/ThermalReceiptModal';
 import { ChaiwaleDialog, ChaiwaleDialogConfig } from '../components/ChaiwaleDialog';
 import { buildWhatsAppUrl } from '../utils/whatsapp';
+import ChaiLoader from '../components/ChaiLoader';
 
 interface CartLineItem {
   productId: string;
@@ -1073,9 +1074,8 @@ G-31, Vardhman Grand Plaza, Rohini Sector-3, New Delhi`;
 
           {/* Invoice Cards */}
           {loadingInvoices ? (
-            <div style={{ padding: '50px 20px', textAlign: 'center', color: '#64748B' }}>
-              <div style={{ fontSize: '24px', marginBottom: '8px' }}>⏳</div>
-              <div>Loading bills...</div>
+            <div style={{ padding: '40px 20px', textAlign: 'center' }}>
+              <ChaiLoader label="Loading Bills..." sublabel="Fetching recent store invoices & payments..." />
             </div>
           ) : filteredInvoices.length === 0 ? (
             <div style={{ padding: '50px 20px', textAlign: 'center', color: '#64748B', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
