@@ -96,6 +96,15 @@ export default function BillbookPosPage() {
   // UPI QR Modal State
   const [showUpiModal, setShowUpiModal] = useState<boolean>(false);
 
+  // In-App WhatsApp Dispatch Dialog State
+  const [whatsAppModalData, setWhatsAppModalData] = useState<{
+    invoice: InvoiceRecordDto;
+    detectedPhone: string;
+    customerName: string;
+    paymentMode: string;
+  } | null>(null);
+  const [whatsAppTargetPhone, setWhatsAppTargetPhone] = useState<string>('');
+
   // Invoices / Bills History State
   const [invoicesList, setInvoicesList] = useState<InvoiceRecordDto[]>([]);
   const [loadingInvoices, setLoadingInvoices] = useState<boolean>(false);
@@ -1306,7 +1315,7 @@ G-31, Vardhman Grand Plaza, Rohini Sector-3, New Delhi`;
                       onClick={() => {
                         const corp = inv.corporate_clients as any;
 
-                        // Smart Phone Detection: check direct phone fields first, then extract from customer string/rawCust
+                        // 1. Smart Phone Detection
                         const findInvoicePhone = (): string => {
                           const directPhone = (inv.orders?.customers?.phone || corp?.phone || (inv.orders as any)?.customer_phone || (inv.orders as any)?.phone || (inv as any).customer_phone || '') + '';
                           const cleanDirect = directPhone.replace(/\D/g, '');
@@ -1320,31 +1329,40 @@ G-31, Vardhman Grand Plaza, Rohini Sector-3, New Delhi`;
                           return '';
                         };
 
-                        const detectedPhone = findInvoicePhone();
-                        const promptMsg = detectedPhone
-                          ? `Send WhatsApp Bill #${inv.invoice_number}?\n\nPress OK to send to ${detectedPhone}, or enter an alternate 10-digit number:`
-                          : `Enter customer 10-digit WhatsApp number to send Bill #${inv.invoice_number}:`;
+                        // 2. Clean Customer Name Extraction
+                        const getCleanCustomerName = (): string => {
+                          const possibleNames = [
+                            inv.orders?.customer_name,
+                            corp?.name,
+                            corp?.company_name,
+                            inv.department,
+                            inv.orders?.delivery_address,
+                            rawCust
+                          ];
+                          for (const name of possibleNames) {
+                            if (!name) continue;
+                            const cleaned = String(name)
+                              .replace(/\+?91[\s\-]?[6-9]\d{9}/g, '')
+                              .replace(/\b[6-9]\d{9}\b/g, '')
+                              .replace(/[()\[\]]/g, '')
+                              .trim();
+                            if (cleaned && cleaned.toLowerCase() !== 'counter walk-in' && cleaned.toLowerCase() !== 'walk-in guest' && cleaned.toLowerCase() !== 'customer') {
+                              return cleaned.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+                            }
+                          }
+                          return 'Customer';
+                        };
 
-                        const input = window.prompt(promptMsg, detectedPhone);
-                        if (input === null) return; // user cancelled
+                        const phone = findInvoicePhone();
+                        const cName = getCleanCustomerName();
 
-                        const targetPhone = input.replace(/\D/g, '').slice(-10);
-                        if (targetPhone.length < 10) {
-                          alert('Please enter a valid 10-digit mobile number.');
-                          return;
-                        }
-
-                        const fullPhone = `91${targetPhone}`;
-                        const clientPin = corp?.client_pin || '----';
-                        const link = `https://chaiwale.co.in/check-bill?phone=${targetPhone}${clientPin !== '----' ? `&pin=${clientPin}` : ''}&bill=${encodeURIComponent(inv.invoice_number)}`;
-
-                        let cleanCustName = (inv.orders?.customer_name || corp?.name || corp?.company_name || 'Customer')
-                          .replace(/\(?\b[6-9]\d{9}\b\)?/g, '')
-                          .trim() || 'Customer';
-
-                        const waMsg = `Namaste ${cleanCustName} ji! 🙏\n\nYour Chaiwale Bill #${inv.invoice_number} is ready.\nTotal: ₹${Number(inv.grand_total).toFixed(0)} (${pMode}).\n\nView & download your official Tax Invoice (PDF) and Thermal Slip here:\n${link}\n\nLogin credentials to check all your past bills:\nMobile: ${targetPhone}\nPIN: ${clientPin}\n\nThank you for choosing Chaiwale!\nChaiwale — Vardhman Grand Plaza, Rohini Sector-3, Delhi`;
-
-                        window.open(`https://wa.me/${fullPhone}?text=${encodeURIComponent(waMsg)}`, '_blank');
+                        setWhatsAppTargetPhone(phone);
+                        setWhatsAppModalData({
+                          invoice: inv,
+                          detectedPhone: phone,
+                          customerName: cName,
+                          paymentMode: pMode
+                        });
                       }}
                       style={{
                         flex: '1 1 calc(25% - 8px)', minWidth: '105px', padding: '12px 6px', backgroundColor: '#25D366', color: '#FFFFFF',
@@ -2953,7 +2971,7 @@ G-31, Vardhman Grand Plaza, Rohini Sector-3, New Delhi`;
               }}
             >
               <img
-                src="https://hwbdyuupfobpznfroapa.supabase.co/storage/v1/object/public/branding/assets/chaiwale-upi-qr.jpg"
+                src="/assets/chaiwale-upi-qr.jpeg"
                 alt="Chaiwale Verified UPI QR Code"
                 style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '8px' }}
                 onError={(e) => {
@@ -3040,6 +3058,182 @@ G-31, Vardhman Grand Plaza, Rohini Sector-3, New Delhi`;
             >
               ✓ Payment Verified / Close QR
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Custom In-App WhatsApp Dispatch Dialog (No browser alert) ── */}
+      {whatsAppModalData && (
+        <div
+          onClick={(e) => { if (e.target === e.currentTarget) setWhatsAppModalData(null); }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 999999,
+            backgroundColor: 'rgba(15, 23, 42, 0.7)',
+            backdropFilter: 'blur(5px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px'
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              maxWidth: '420px',
+              width: '100%',
+              padding: '24px 22px',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+              position: 'relative',
+              textAlign: 'left'
+            }}
+          >
+            {/* Close Button */}
+            <button
+              onClick={() => setWhatsAppModalData(null)}
+              style={{
+                position: 'absolute',
+                top: '14px',
+                right: '14px',
+                background: '#F1F5F9',
+                border: 'none',
+                borderRadius: '50%',
+                width: '32px',
+                height: '32px',
+                cursor: 'pointer',
+                fontWeight: 700,
+                color: '#475569',
+                fontSize: '14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              ✕
+            </button>
+
+            <div style={{ display: 'inline-flex', padding: '4px 10px', borderRadius: '20px', backgroundColor: '#DCFCE7', color: '#166534', fontSize: '11px', fontWeight: 800, marginBottom: '8px' }}>
+              💬 SEND BILL ON WHATSAPP
+            </div>
+
+            <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: '0 0 4px 0' }}>
+              Bill #{whatsAppModalData.invoice.invoice_number}
+            </h3>
+            <p style={{ fontSize: '12.5px', color: '#64748B', margin: '0 0 16px 0' }}>
+              Customer: <strong style={{ color: '#0F172A' }}>{whatsAppModalData.customerName}</strong> • Total: <strong style={{ color: '#16A34A' }}>₹{Number(whatsAppModalData.invoice.grand_total).toFixed(0)}</strong>
+            </p>
+
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
+              WhatsApp Mobile Number:
+            </label>
+            <div style={{ position: 'relative', marginBottom: '8px' }}>
+              <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '13px', fontWeight: 700, color: '#64748B' }}>
+                🇮🇳 +91
+              </span>
+              <input
+                type="tel"
+                maxLength={10}
+                placeholder="10-digit mobile number"
+                value={whatsAppTargetPhone}
+                onChange={(e) => setWhatsAppTargetPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                autoFocus
+                style={{
+                  width: '100%',
+                  padding: '11px 12px 11px 65px',
+                  borderRadius: '10px',
+                  border: whatsAppTargetPhone.length === 10 ? '2px solid #22C55E' : '1.5px solid #CBD5E1',
+                  fontSize: '15px',
+                  fontWeight: 700,
+                  color: '#0F172A',
+                  outline: 'none',
+                  letterSpacing: '0.04em'
+                }}
+              />
+            </div>
+
+            {whatsAppModalData.detectedPhone ? (
+              <div style={{ fontSize: '11px', color: '#15803D', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>✓ Pre-filled from customer bill</span>
+                {whatsAppTargetPhone !== whatsAppModalData.detectedPhone && (
+                  <button
+                    type="button"
+                    onClick={() => setWhatsAppTargetPhone(whatsAppModalData.detectedPhone)}
+                    style={{ background: 'none', border: 'none', color: '#2563EB', cursor: 'pointer', fontSize: '11px', textDecoration: 'underline', padding: 0 }}
+                  >
+                    Reset to {whatsAppModalData.detectedPhone}
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div style={{ fontSize: '11px', color: '#64748B', marginBottom: '16px' }}>
+                ℹ️ Enter customer's 10-digit WhatsApp number to deliver bill.
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+              <button
+                type="button"
+                onClick={() => setWhatsAppModalData(null)}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  backgroundColor: '#F1F5F9',
+                  color: '#475569',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const target = whatsAppTargetPhone.replace(/\D/g, '');
+                  if (target.length !== 10) {
+                    alert('Please enter a valid 10-digit mobile number.');
+                    return;
+                  }
+                  const inv = whatsAppModalData.invoice;
+                  const corp = inv.corporate_clients as any;
+                  const clientPin = corp?.client_pin || '----';
+                  const link = `https://chaiwale.co.in/check-bill?phone=${target}${clientPin !== '----' ? `&pin=${clientPin}` : ''}&bill=${encodeURIComponent(inv.invoice_number)}`;
+                  const fullPhone = `91${target}`;
+
+                  const nameGreeting = whatsAppModalData.customerName && whatsAppModalData.customerName !== 'Customer'
+                    ? `${whatsAppModalData.customerName} ji`
+                    : 'ji';
+
+                  const waMsg = `Namaste ${nameGreeting}! 🙏\n\nYour Chaiwale Bill #${inv.invoice_number} is ready.\nTotal: ₹${Number(inv.grand_total).toFixed(0)} (${whatsAppModalData.paymentMode}).\n\nView & download your official Tax Invoice (PDF) and Thermal Slip here:\n${link}\n\nLogin credentials to check all your past bills:\nMobile: ${target}\nPIN: ${clientPin}\n\nThank you for choosing Chaiwale!\nChaiwale — Vardhman Grand Plaza, Rohini Sector-3, Delhi`;
+
+                  window.open(`https://wa.me/${fullPhone}?text=${encodeURIComponent(waMsg)}`, '_blank');
+                  setWhatsAppModalData(null);
+                }}
+                disabled={whatsAppTargetPhone.length !== 10}
+                style={{
+                  flex: 2,
+                  padding: '12px',
+                  backgroundColor: whatsAppTargetPhone.length === 10 ? '#25D366' : '#94A3B8',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  fontWeight: 800,
+                  cursor: whatsAppTargetPhone.length === 10 ? 'pointer' : 'not-allowed',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  boxShadow: whatsAppTargetPhone.length === 10 ? '0 4px 12px rgba(37, 211, 102, 0.35)' : 'none'
+                }}
+              >
+                💬 Open WhatsApp
+              </button>
+            </div>
           </div>
         </div>
       )}
