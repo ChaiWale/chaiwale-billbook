@@ -1160,29 +1160,25 @@ G-31, Vardhman Grand Plaza, Rohini Sector-3, New Delhi`;
                 onClick={(e) => { if (e.target === e.currentTarget) setSelectedInvoice(null); }}
                 style={{
                   position: 'fixed', inset: 0, zIndex: 99990,
-                  background: 'rgba(15,23,42,0.55)',
-                  display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+                  background: 'rgba(15,23,42,0.6)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  padding: '16px',
                   backdropFilter: 'blur(4px)'
                 }}
               >
                 <div style={{
                   width: '100%',
-                  maxWidth: '540px',
+                  maxWidth: '520px',
                   backgroundColor: '#FFFFFF',
-                  borderRadius: '20px 20px 0 0',
-                  padding: '0 0 env(safe-area-inset-bottom, 16px)',
-                  maxHeight: '90dvh',
+                  borderRadius: '20px',
+                  maxHeight: '88vh',
                   display: 'flex',
                   flexDirection: 'column',
-                  boxShadow: '0 -8px 40px rgba(0,0,0,0.18)'
+                  boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)',
+                  overflow: 'hidden'
                 }}>
-                  {/* Drag Handle */}
-                  <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 0' }}>
-                    <div style={{ width: '40px', height: '4px', borderRadius: '99px', backgroundColor: '#CBD5E1' }} />
-                  </div>
-
                   {/* Header */}
-                  <div style={{ padding: '14px 20px 12px', borderBottom: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ padding: '16px 20px 14px', borderBottom: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
                       <div style={{ fontFamily: 'monospace', fontWeight: 900, fontSize: '17px', color: '#0F172A' }}>{inv.invoice_number}</div>
                       <div style={{ fontSize: '12.5px', color: '#64748B', marginTop: '2px' }}>
@@ -1309,35 +1305,44 @@ G-31, Vardhman Grand Plaza, Rohini Sector-3, New Delhi`;
                       type="button"
                       onClick={() => {
                         const corp = inv.corporate_clients as any;
-                        const rawPhone = inv.orders?.customers?.phone || corp?.phone || (inv as any).customer_phone;
-                        let targetPhone = rawPhone ? rawPhone.replace(/\D/g, '') : '';
-                        if (!targetPhone || targetPhone.length < 10) {
-                          const input = window.prompt('Enter customer 10-digit WhatsApp number:');
-                          if (!input) return;
-                          targetPhone = input.replace(/\D/g, '');
-                        }
+
+                        // Smart Phone Detection: check direct phone fields first, then extract from customer string/rawCust
+                        const findInvoicePhone = (): string => {
+                          const directPhone = (inv.orders?.customers?.phone || corp?.phone || (inv.orders as any)?.customer_phone || (inv.orders as any)?.phone || (inv as any).customer_phone || '') + '';
+                          const cleanDirect = directPhone.replace(/\D/g, '');
+                          if (cleanDirect.length >= 10) return cleanDirect.slice(-10);
+
+                          const fullText = `${rawCust} ${inv.orders?.customer_name || ''} ${inv.orders?.delivery_address || ''} ${inv.department || ''}`;
+                          const match = fullText.match(/(?:(?:\+?91)|0)?([6-9]\d{9})\b/);
+                          if (match && match[1]) {
+                            return match[1];
+                          }
+                          return '';
+                        };
+
+                        const detectedPhone = findInvoicePhone();
+                        const promptMsg = detectedPhone
+                          ? `Send WhatsApp Bill #${inv.invoice_number}?\n\nPress OK to send to ${detectedPhone}, or enter an alternate 10-digit number:`
+                          : `Enter customer 10-digit WhatsApp number to send Bill #${inv.invoice_number}:`;
+
+                        const input = window.prompt(promptMsg, detectedPhone);
+                        if (input === null) return; // user cancelled
+
+                        const targetPhone = input.replace(/\D/g, '').slice(-10);
                         if (targetPhone.length < 10) {
                           alert('Please enter a valid 10-digit mobile number.');
                           return;
                         }
-                        const fullPhone = targetPhone.length === 10 ? `91${targetPhone}` : targetPhone;
+
+                        const fullPhone = `91${targetPhone}`;
                         const clientPin = corp?.client_pin || '----';
                         const link = `https://chaiwale.co.in/check-bill?phone=${targetPhone}${clientPin !== '----' ? `&pin=${clientPin}` : ''}&bill=${encodeURIComponent(inv.invoice_number)}`;
-                        const custName = inv.orders?.customer_name || corp?.name || corp?.company_name || 'Customer';
-                        const waMsg = `Namaste ${custName} ji! 🙏
 
-Your Chaiwale Bill #${inv.invoice_number} is ready.
-Total: ₹${Number(inv.grand_total).toFixed(0)} (${pMode}).
+                        let cleanCustName = (inv.orders?.customer_name || corp?.name || corp?.company_name || 'Customer')
+                          .replace(/\(?\b[6-9]\d{9}\b\)?/g, '')
+                          .trim() || 'Customer';
 
-View & download your official Tax Invoice (PDF) and Thermal Slip here:
-${link}
-
-Login credentials to check all your past bills:
-Mobile: ${targetPhone}
-PIN: ${clientPin}
-
-Thank you for choosing Chaiwale!
-Chaiwale — Vardhman Grand Plaza, Rohini Sector-3, Delhi`;
+                        const waMsg = `Namaste ${cleanCustName} ji! 🙏\n\nYour Chaiwale Bill #${inv.invoice_number} is ready.\nTotal: ₹${Number(inv.grand_total).toFixed(0)} (${pMode}).\n\nView & download your official Tax Invoice (PDF) and Thermal Slip here:\n${link}\n\nLogin credentials to check all your past bills:\nMobile: ${targetPhone}\nPIN: ${clientPin}\n\nThank you for choosing Chaiwale!\nChaiwale — Vardhman Grand Plaza, Rohini Sector-3, Delhi`;
 
                         window.open(`https://wa.me/${fullPhone}?text=${encodeURIComponent(waMsg)}`, '_blank');
                       }}
@@ -2948,9 +2953,12 @@ Chaiwale — Vardhman Grand Plaza, Rohini Sector-3, Delhi`;
               }}
             >
               <img
-                src="/assets/chaiwale-upi-qr.jpeg"
+                src="https://hwbdyuupfobpznfroapa.supabase.co/storage/v1/object/public/branding/assets/chaiwale-upi-qr.jpg"
                 alt="Chaiwale Verified UPI QR Code"
                 style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '8px' }}
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = '/assets/chaiwale-upi-qr_edited.jpg';
+                }}
               />
             </div>
 
