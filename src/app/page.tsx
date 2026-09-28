@@ -398,10 +398,17 @@ export default function BillbookPosPage() {
     }
   }, []);
 
-  // Background pre-fetch of Bills and Web Orders count on terminal startup
+  // Background pre-fetch of Bills, Web Orders and Khata accounts on terminal startup
   useEffect(() => {
     loadInvoices(true);
     loadOnlineOrders(true);
+    fetchKhataOffices()
+      .then((list) => {
+        if (typeof window !== 'undefined' && Array.isArray(list) && list.length > 0) {
+          localStorage.setItem('cw_cached_khata_offices', JSON.stringify(list));
+        }
+      })
+      .catch(() => {});
   }, [loadInvoices, loadOnlineOrders]);
 
   useEffect(() => {

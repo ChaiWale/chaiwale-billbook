@@ -19,8 +19,27 @@ import { ChaiwaleDialog, ChaiwaleDialogConfig } from './ChaiwaleDialog';
 import ChaiLoader from './ChaiLoader';
 
 export const BillbookKhataView: React.FC = () => {
-  const [offices, setOffices] = useState<KhataOfficeDto[]>([]);
-  const [selectedOfficeId, setSelectedOfficeId] = useState<string | null>(null);
+  const [offices, setOffices] = useState<KhataOfficeDto[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('cw_cached_khata_offices');
+        if (cached) return JSON.parse(cached);
+      } catch {}
+    }
+    return [];
+  });
+  const [selectedOfficeId, setSelectedOfficeId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('cw_cached_khata_offices');
+        if (cached) {
+          const list = JSON.parse(cached);
+          if (Array.isArray(list) && list.length > 0) return list[0].id;
+        }
+      } catch {}
+    }
+    return null;
+  });
   const [statement, setStatement] = useState<KhataStatementDto | null>(null);
   const [loading, setLoading] = useState(false);
   const [statementLoading, setStatementLoading] = useState(false);
@@ -73,10 +92,15 @@ export const BillbookKhataView: React.FC = () => {
   ];
 
   const loadOffices = async () => {
-    setLoading(true);
+    if (offices.length === 0) {
+      setLoading(true);
+    }
     try {
       const list = await fetchKhataOffices();
       setOffices(list);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('cw_cached_khata_offices', JSON.stringify(list));
+      }
       if (list.length > 0 && !selectedOfficeId) {
         setSelectedOfficeId(list[0].id);
       }
@@ -632,8 +656,31 @@ export const BillbookKhataView: React.FC = () => {
           </div>
         </div>
 
-        {/* Global Export Excel Button */}
+        {/* Global Export Excel & Refresh Buttons */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button
+            type="button"
+            onClick={() => loadOffices()}
+            disabled={loading}
+            style={{
+              padding: '7px 14px',
+              borderRadius: '8px',
+              border: '1px solid #CBD5E1',
+              backgroundColor: '#FFFFFF',
+              color: '#334155',
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
+            }}
+            title="Refresh Khata accounts and live balances"
+          >
+            <span>{loading ? '⏳ Syncing...' : '🔄 Refresh Khata'}</span>
+          </button>
+
           <button
             type="button"
             onClick={() => {
@@ -698,7 +745,11 @@ export const BillbookKhataView: React.FC = () => {
 
           {/* Office List */}
           <div style={{ flex: 1, overflowY: 'auto' }}>
-            {filteredOffices.length === 0 ? (
+            {loading && offices.length === 0 ? (
+              <div style={{ padding: '36px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                <ChaiLoader label="Loading Khata Accounts" sublabel="Fetching accounts & real-time balances..." />
+              </div>
+            ) : filteredOffices.length === 0 ? (
               <div style={{ padding: '32px', textAlign: 'center', color: '#9CA3AF', fontSize: '13px' }}>
                 No office accounts found. Click "+ Add New Office" to start.
               </div>
@@ -1421,6 +1472,10 @@ export const BillbookKhataView: React.FC = () => {
                   </div>
                 )}
               </div>
+            </div>
+          ) : loading && offices.length === 0 ? (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '350px' }}>
+              <ChaiLoader label="Syncing Khata Ledger" sublabel="Loading accounts, consumption & balance dues..." />
             </div>
           ) : (
             <div style={{ padding: '48px', textAlign: 'center', color: '#9CA3AF' }}>
